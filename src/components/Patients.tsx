@@ -1,0 +1,235 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { Search, UserPlus, FileText, Edit2, Phone, Mail, Calendar, CreditCard, MapPin, Upload, Camera, Image as ImageIcon, X } from 'lucide-react';
+import { MOCK_PATIENTS, Patient } from '../types';
+import { useState, useRef, ChangeEvent } from 'react';
+
+export default function Patients() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const filteredPatients = patients.filter(p => 
+    p.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.cpf.includes(searchTerm)
+  );
+
+  const handleAvatarClick = (patientId: string) => {
+    setEditingPatientId(patientId);
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && editingPatientId) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setPatients(prev => prev.map(p => 
+          p.id === editingPatientId ? { ...p, avatarUrl: result } : p
+        ));
+        setEditingPatientId(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="p-8 h-full overflow-y-auto bg-slate-50">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        accept="image/*" 
+        onChange={handleFileChange}
+      />
+
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Gestão de Pacientes</h2>
+          <p className="text-sm text-slate-500 font-medium">Visualize e gerencie o cadastro de seus pacientes.</p>
+        </div>
+        
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95">
+          <UserPlus size={20} />
+          <span>Cadastrar Novo Paciente</span>
+        </button>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar por nome ou CPF..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{filteredPatients.length} PACIENTES ENCONTRADOS</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5">Paciente</th>
+                <th className="px-8 py-5">Documentos</th>
+                <th className="px-8 py-5">Contato</th>
+                <th className="px-8 py-5">Localização</th>
+                <th className="px-8 py-5 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredPatients.map((patient) => (
+                <tr key={patient.id} className="hover:bg-slate-50/80 transition-colors group">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div 
+                        onClick={() => handleAvatarClick(patient.id)}
+                        className="relative w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shadow-sm border border-slate-100 cursor-pointer overflow-hidden transition-all hover:ring-2 hover:ring-blue-500 group/avatar"
+                      >
+                        {patient.avatarUrl ? (
+                          <img src={patient.avatarUrl} alt={patient.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span>{patient.fullName.charAt(0)}</span>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity">
+                          <Camera size={16} className="text-white" />
+                        </div>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-600 transition-colors">{patient.fullName}</span>
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <Calendar size={12} className="shrink-0" />
+                          <span className="text-xs font-bold">{new Date(patient.birthDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  
+                  <td className="px-8 py-6">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <CreditCard size={14} className="text-slate-400" />
+                        <span className="text-xs font-bold font-mono">CPF: {patient.cpf}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-blue-600/60">
+                        <FileText size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-wider">Histórico Ativo</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-8 py-6">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <Phone size={14} className="text-blue-500" />
+                        <span className="text-xs font-bold">{patient.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <Mail size={14} />
+                        <span className="text-xs font-medium truncate max-w-[150px]">{patient.email}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <MapPin size={16} className="text-rose-400 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">{patient.address.city}, {patient.address.state}</span>
+                        <span className="text-[10px] text-slate-400">{patient.address.street}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Prontuário">
+                        <FileText size={20} />
+                      </button>
+                      <button className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Editar Cadastro">
+                        <Edit2 size={20} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          {filteredPatients.length === 0 && (
+            <div className="p-20 flex flex-col items-center justify-center text-slate-400">
+              <Search size={48} className="mb-4 opacity-20" />
+              <p className="font-bold">Nenhum paciente encontrado para sua busca.</p>
+              <button className="mt-4 text-blue-600 font-bold hover:underline" onClick={() => setSearchTerm('')}>Limpar busca</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Avatar Upload Modal */}
+      {editingPatientId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="font-bold text-slate-900">Atualizar Foto do Paciente</h3>
+              <button 
+                onClick={() => setEditingPatientId(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-8 flex flex-col items-center gap-6">
+              <div className="w-32 h-32 rounded-3xl bg-blue-50 border-2 border-dashed border-blue-200 flex items-center justify-center overflow-hidden">
+                {patients.find(p => p.id === editingPatientId)?.avatarUrl ? (
+                  <img 
+                    src={patients.find(p => p.id === editingPatientId)?.avatarUrl} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <ImageIcon size={48} className="text-blue-300" />
+                )}
+              </div>
+
+              <div className="text-center">
+                <p className="text-sm font-bold text-slate-800">Avatar de {patients.find(p => p.id === editingPatientId)?.fullName}</p>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Selecione uma imagem quadrada para melhor visualização.</p>
+              </div>
+
+              <div className="grid grid-cols-1 w-full gap-3">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold transition-all shadow-lg shadow-blue-100 group"
+                >
+                  <Upload size={20} className="group-hover:-translate-y-1 transition-transform" />
+                  <span>Escolher do Computador</span>
+                </button>
+                
+                <button 
+                  onClick={() => setEditingPatientId(null)}
+                  className="bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

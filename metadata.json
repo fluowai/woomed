@@ -1,0 +1,6 @@
+{
+  "name": "Consultio Med",
+  "description": "Plataforma completa de gestão para clínicas e consultórios médicos, com agenda inteligente e prontuário eletrônico.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
