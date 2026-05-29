@@ -1,88 +1,60 @@
 import express from "express";
 import path from "path";
+import { createServer as createHttpServer } from "http";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
-  }
-});
+import cors from "cors";
+import helmet from "helmet";
+import { PORT } from "./server/config";
+import { isDatabaseAvailable, runMigrations } from "./server/database";
+import { registerRoutes } from "./server/routes/index";
+import { registerWhatsAppRoutes } from "./server/routes/whatsapp";
+import { registerPhase1Routes } from "./server/routes/phase1";
+import { registerPhase2Routes } from "./server/routes/phase2";
+import { scheduleAutoBackup } from "./server/backup";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const httpServer = createHttpServer(app);
 
-  app.use(express.json());
+  app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+  app.use(express.json({ limit: "10mb" }));
 
-  // AI Scheduling Suggestion API
-  app.post("/api/chat", async (req, res) => {
+  // Database
+  if (isDatabaseAvailable()) {
     try {
-      const { message, context } = req.body;
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: message,
-        config: {
-          systemInstruction: `Você é um assistente de agendamento do Consultio Med. 
-          Sua função é sugerir datas e horários disponíveis para consultas baseando-se no contexto fornecido.
-          Contexto atual: ${JSON.stringify(context)}`,
-        }
-      });
-
-      res.json({ text: response.text });
+      await runMigrations();
+      console.log("PostgreSQL connected and migrations applied.");
     } catch (error) {
-      console.error("Gemini Error:", error);
-      res.status(500).json({ error: "Erro ao processar sua solicitação." });
+      console.error("PostgreSQL migration failed, falling back to JSON storage:", error);
     }
-  });
-
-  // AI Structured Suggestions API
-  app.post("/api/suggestions", async (req, res) => {
-    try {
-      const { doctor, requestedSlot, currentAppointments } = req.body;
-      
-      const prompt = `Analise a agenda do ${doctor.name} (${doctor.specialty}). 
-      O usuário tentou agendar para ${requestedSlot.date} às ${requestedSlot.time}, mas este horário está indisponível ou em conflito.
-      Agendamentos atuais do médico: ${JSON.stringify(currentAppointments)}.
-      Ele trabalha das ${doctor.workingHours.start} às ${doctor.workingHours.end} nos dias: ${doctor.availableDays.join(", ")}.
-      Sugira 3 alternativas próximas (datas e horários) que estejam livres e respeitem o horário de trabalho.
-      Retorne APENAS um JSON no formato: [{"date": "YYYY-MM-DD", "time": "HH:MM", "reason": "Motivo da sugestão"}]`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
-
-      const suggestions = JSON.parse(response.text || "[]");
-      res.json(suggestions);
-    } catch (error) {
-      console.error("Suggestion Error:", error);
-      res.status(500).json({ error: "Falha ao gerar sugestões." });
-    }
-  });
-
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    console.log("No DATABASE_URL configured. Using JSON file storage.");
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  // Serve uploaded files
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+  // Routes
+  registerRoutes(app);
+  registerWhatsAppRoutes(app, httpServer);
+  registerPhase1Routes(app);
+  registerPhase2Routes(app);
+
+  // Auto backup
+  scheduleAutoBackup().catch(console.error);
+
+  // Vite / Static
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
+  }
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }

@@ -1,0 +1,36 @@
+services:
+  consultio-med:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: consultio-med:latest
+    container_name: consultio-med
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5173
+      APP_URL: ${APP_URL:-http://localhost:5173}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      WHATSMEOW_API_URL: ${WHATSMEOW_API_URL:-}
+      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
+      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
+    ports:
+      - "${APP_PORT:-5173}:5173"
+    volumes:
+      - consultio_med_data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/auth/users').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  consultio_med_data:

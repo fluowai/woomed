@@ -1,0 +1,69 @@
+services:
+  consultio-med:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: consultio-med:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5173
+      APP_URL: ${APP_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      WHATSMEOW_API_URL: ${WHATSMEOW_API_URL:-}
+      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
+      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
+    volumes:
+      - consultio_med_data:/app/data
+    expose:
+      - "5173"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/auth/users').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - consultio_public
+
+  proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      consultio-med:
+        condition: service_healthy
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    command:
+      - caddy
+      - reverse-proxy
+      - --from
+      - ${APP_DOMAIN}
+      - --to
+      - consultio-med:5173
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - consultio_public
+
+networks:
+  consultio_public:
+    driver: bridge
+
+volumes:
+  consultio_med_data:
+  caddy_data:
+  caddy_config:

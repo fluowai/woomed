@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Send, User, Bot, Sparkles, Calendar } from 'lucide-react';
-import { MOCK_DOCTORS, MOCK_APPOINTMENTS } from '../types';
+import { Appointment, Doctor, Patient } from '../types';
 
 interface Message {
   id: string;
@@ -13,7 +13,14 @@ interface Message {
   text: string;
 }
 
-export default function ChatAssistant() {
+interface ChatAssistantProps {
+  token: string | null;
+  doctors: Doctor[];
+  appointments: Appointment[];
+  patients: Patient[];
+}
+
+export default function ChatAssistant({ token, doctors, appointments, patients }: ChatAssistantProps) {
   const [messages, setMessages] = useState<Message[]>([
     { 
       id: '1', 
@@ -44,12 +51,16 @@ export default function ChatAssistant() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           message: input,
           context: {
-            doctors: MOCK_DOCTORS,
-            appointments: MOCK_APPOINTMENTS
+            doctors,
+            appointments,
+            patients
           }
         })
       });
@@ -137,7 +148,7 @@ export default function ChatAssistant() {
             onClick={() => setInput('Quais horários o Dr. Matheus tem amanhã?')}
             className="text-[9px] md:text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200 transition-colors"
           >
-            Horários Dr. Matheus Amarelo
+            Horários Dr. Matheus
           </button>
           <button 
             onClick={() => setInput('Sugira uma data para a Bruna Gabriel')}

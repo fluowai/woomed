@@ -3,66 +3,234 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import { AgendaSubHeader, AppointmentTable } from './components/Agenda';
+import { AgendaSubHeader, AppointmentTable, AgendaCalendar } from './components/Agenda';
 import Patients from './components/Patients';
 import MedicalRecords from './components/MedicalRecords';
 import ChatAssistant from './components/ChatAssistant';
-import { MessageSquareText, Plus, Search, Calendar, Clock, User, Stethoscope, Sparkles } from 'lucide-react';
+import Dashboard from './components/Dashboard';
+import Financeiro from './components/Financeiro';
+import Login from './components/Login';
+import { WhatsAppConnections, WhatsAppInbox } from './components/WhatsApp';
+import {
+  AgentsHub,
+  HelpModule,
+  InteractiveConsultation,
+  InventoryModule,
+  MarketingModule,
+  ReferencesModule,
+  ReferralsModule,
+  ReportsModule,
+  TissModule
+} from './components/ExpansionModules';
+import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
-import { MOCK_PATIENTS, MOCK_DOCTORS, MOCK_APPOINTMENTS } from './types';
+import { apiGet, apiPatch, apiPost, apiPut, apiDelete, BootstrapState } from './api';
+import { ToastProvider, ToastListener, showToast } from './components/Toast';
+import { 
+  MOCK_PATIENTS, 
+  MOCK_DOCTORS, 
+  MOCK_APPOINTMENTS, 
+  MOCK_MEDICAL_RECORDS, 
+  DEFAULT_SERVICE_PRICES,
+  MOCK_FINANCE_TRANSACTIONS,
+  MOCK_HELP_TICKETS,
+  MOCK_INVENTORY_ITEMS,
+  MOCK_MARKETING_CAMPAIGNS,
+  MOCK_REFERENCES,
+  MOCK_REFERRALS,
+  MOCK_SERVICE_AGENTS,
+  MOCK_TISS_GUIDES,
+  AppUser,
+  Patient, 
+  Appointment, 
+  MedicalRecord, 
+  MedicalRecordEntry, 
+  AppointmentStatus,
+  Doctor,
+  FinanceTransaction,
+  ServicePrice,
+  AuditEvent,
+  ServiceAgent,
+  MarketingCampaign,
+  TissGuide,
+  InventoryItem,
+  ReferralRecord,
+  ReferenceMaterial,
+  HelpTicket
+} from './types';
 
-export type ViewType = 'Agenda' | 'Pacientes' | 'Prontuários' | 'Dashboard' | 'Financeiro' | 'Mensagens';
+export type ViewType = string;
+
+const todayDate = () => new Date().toISOString().split('T')[0];
 
 export default function App() {
-  const [activeView, setActiveView] = useState<ViewType>('Agenda');
+  const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('consultio_token'));
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState('');
+  const [activeView, setActiveView] = useState<ViewType>('Dashboard');
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
-  // Modal states
+  // Dynamic States for 100% Functional CRUD
+  const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
+  const [doctors, setDoctors] = useState<Doctor[]>(MOCK_DOCTORS);
+  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  const [medicalRecords, setMedicalRecords] = useState<Record<string, MedicalRecord>>(MOCK_MEDICAL_RECORDS);
+  const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>(MOCK_FINANCE_TRANSACTIONS);
+  const [servicePrices, setServicePrices] = useState<ServicePrice[]>(DEFAULT_SERVICE_PRICES);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [serviceAgents, setServiceAgents] = useState<ServiceAgent[]>(MOCK_SERVICE_AGENTS);
+  const [marketingCampaigns, setMarketingCampaigns] = useState<MarketingCampaign[]>(MOCK_MARKETING_CAMPAIGNS);
+  const [tissGuides, setTissGuides] = useState<TissGuide[]>(MOCK_TISS_GUIDES);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(MOCK_INVENTORY_ITEMS);
+  const [referrals, setReferrals] = useState<ReferralRecord[]>(MOCK_REFERRALS);
+  const [references, setReferences] = useState<ReferenceMaterial[]>(MOCK_REFERENCES);
+  const [helpTickets, setHelpTickets] = useState<HelpTicket[]>(MOCK_HELP_TICKETS);
+  const [currentDate, setCurrentDate] = useState<string>(() => todayDate());
+  const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
+  const [agendaSearch, setAgendaSearch] = useState<string>('');
+
+  // Modal form states
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => todayDate());
+  const [selectedTime, setSelectedTime] = useState('14:30');
+  const [selectedProcedure, setSelectedProcedure] = useState('Consulta Particular');
   
   const [aiSuggestions, setAiSuggestions] = useState<{date: string, time: string, reason: string}[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [hasConflict, setHasConflict] = useState(false);
+  
+  // Selected Patient inside Medical Records View
+  const [activePatientId, setActivePatientId] = useState<string | null>(null);
 
-  const selectedDoctor = useMemo(() => MOCK_DOCTORS.find(d => d.id === selectedDoctorId), [selectedDoctorId]);
+  const applyBootstrapState = (state: BootstrapState) => {
+    setCurrentUser(state.user);
+    setPatients(state.patients);
+    setDoctors(state.doctors);
+    setAppointments(state.appointments);
+    setMedicalRecords(state.medicalRecords);
+    setFinanceTransactions(state.financeTransactions);
+    setServicePrices(state.servicePrices);
+    setAuditEvents(state.auditEvents);
+    setServiceAgents(state.serviceAgents);
+    setMarketingCampaigns(state.marketingCampaigns);
+    setTissGuides(state.tissGuides);
+    setInventoryItems(state.inventoryItems);
+    setReferrals(state.referrals);
+    setReferences(state.references);
+    setHelpTickets(state.helpTickets);
+  };
 
-  // Check for conflicts and trigger AI suggestions
+  useEffect(() => {
+    if (!authToken) {
+      setIsBootstrapping(false);
+      return;
+    }
+
+    apiGet<BootstrapState>('/api/bootstrap', authToken)
+      .then(applyBootstrapState)
+      .catch((error) => {
+        localStorage.removeItem('consultio_token');
+        setAuthToken(null);
+        setBootstrapError(error instanceof Error ? error.message : 'Sessao expirada.');
+      })
+      .finally(() => setIsBootstrapping(false));
+  }, [authToken]);
+
+  const handleLogin = (token: string, user: AppUser, state: BootstrapState) => {
+    localStorage.setItem('consultio_token', token);
+    setAuthToken(token);
+    setCurrentUser(user);
+    applyBootstrapState(state);
+  };
+
+  const handleLogout = () => {
+    if (authToken) {
+      apiPost('/api/auth/logout', authToken).catch(() => undefined);
+    }
+    localStorage.removeItem('consultio_token');
+    setAuthToken(null);
+    setCurrentUser(null);
+    setActiveView('Dashboard');
+  };
+
+  const selectedDoctor = useMemo(() => doctors.find(d => d.id === selectedDoctorId), [selectedDoctorId, doctors]);
+
+  const timeToMinutes = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const dayName = (dateStr: string) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+  };
+
+  const isSlotFree = (doctorId: string, date: string, timeStart: string, timeEnd: string) => {
+    const start = timeToMinutes(timeStart);
+    const end = timeToMinutes(timeEnd);
+    return !appointments.some(a => {
+      if (a.doctorId !== doctorId || a.date !== date || a.status === 'desmarcado') return false;
+      const aptStart = timeToMinutes(a.timeStart);
+      const aptEnd = timeToMinutes(a.timeEnd);
+      return start < aptEnd && end > aptStart;
+    });
+  };
+
+  // Calculate standard 30 min consult duration block
+  const calculateTimeEnd = (timeStart: string) => {
+    if (!timeStart) return '';
+    const [h, m] = timeStart.split(':').map(Number);
+    let newM = m + 30;
+    let newH = h;
+    if (newM >= 60) {
+      newM -= 60;
+      newH += 1;
+    }
+    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+  };
+
+  // Conflict verification
   const checkAvailability = useMemo(() => {
     if (!selectedDoctorId || !selectedDate || !selectedTime) return { hasConflict: false };
-    
-    const conflict = MOCK_APPOINTMENTS.find(a => 
-      a.doctorId === selectedDoctorId && 
-      a.date === selectedDate && 
-      a.timeStart === selectedTime
-    );
 
-    return { hasConflict: !!conflict };
-  }, [selectedDoctorId, selectedDate, selectedTime]);
+    const timeEnd = calculateTimeEnd(selectedTime);
+    if (!selectedDoctor || !timeEnd) return { hasConflict: false };
 
+    if (!selectedDoctor.availableDays.includes(dayName(selectedDate))) {
+      return { hasConflict: true, reason: 'O profissional nao atende neste dia.' };
+    }
+
+    const start = timeToMinutes(selectedTime);
+    const end = timeToMinutes(timeEnd);
+    if (start < timeToMinutes(selectedDoctor.workingHours.start) || end > timeToMinutes(selectedDoctor.workingHours.end)) {
+      return { hasConflict: true, reason: 'Horario fora da grade do profissional.' };
+    }
+
+    return { hasConflict: !isSlotFree(selectedDoctorId, selectedDate, selectedTime, timeEnd) };
+  }, [selectedDoctorId, selectedDate, selectedTime, appointments, selectedDoctor]);
+
+  // AI Suggestions fetcher
   useEffect(() => {
     if (checkAvailability.hasConflict && !isAiLoading) {
       setHasConflict(true);
-      const doctor = MOCK_DOCTORS.find(d => d.id === selectedDoctorId);
+      const doctor = doctors.find(d => d.id === selectedDoctorId);
       if (doctor) {
         setIsAiLoading(true);
         fetch('/api/suggestions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+          },
           body: JSON.stringify({
             doctor,
             requestedSlot: { date: selectedDate, time: selectedTime },
-            currentAppointments: MOCK_APPOINTMENTS.filter(a => a.doctorId === selectedDoctorId)
+            currentAppointments: appointments.filter(a => a.doctorId === selectedDoctorId)
           })
         }).then(res => res.json())
           .then(data => {
@@ -75,25 +243,447 @@ export default function App() {
       setHasConflict(false);
       setAiSuggestions([]);
     }
-  }, [checkAvailability.hasConflict, selectedDoctorId, selectedDate, selectedTime]);
+  }, [checkAvailability.hasConflict, selectedDoctorId, selectedDate, selectedTime, appointments, doctors, authToken]);
+
+  // State manipulation handlers
+  const handleAddAppointment = async () => {
+    if (!selectedPatientId || !selectedDoctorId || !selectedDate || !selectedTime) return;
+
+    const patient = patients.find(p => p.id === selectedPatientId);
+    if (!patient) return;
+
+    try {
+      const response = await apiPost<{ appointment: Appointment }>('/api/appointments', authToken, {
+        patientId: selectedPatientId,
+        doctorId: selectedDoctorId,
+        date: selectedDate,
+        timeStart: selectedTime,
+        type: selectedProcedure || 'Consulta Particular',
+        observations: ''
+      });
+
+      setAppointments(prev => [...prev, response.appointment]);
+      setIsSchedulingOpen(false);
+
+      setSelectedPatientId('');
+      setSelectedDoctorId('');
+      setSelectedDate(todayDate());
+      setSelectedTime('14:30');
+      setSelectedProcedure('Consulta Particular');
+
+      showToast('success', `Agendamento de ${patient.fullName} cadastrado com sucesso!`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao cadastrar agendamento.');
+    }
+  };
+
+  const handleUpdateAppointmentStatus = async (id: string, newStatus: AppointmentStatus) => {
+    try {
+      const response = await apiPatch<{ appointment: Appointment }>(`/api/appointments/${id}/status`, authToken, { status: newStatus });
+      setAppointments(prev => prev.map(a => a.id === id ? response.appointment : a));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar status.');
+    }
+  };
+
+  const handleStartConsultation = async (id: string, patientName: string) => {
+    // 1. Update status to em_atendimento
+    await handleUpdateAppointmentStatus(id, 'em_atendimento');
+    
+    // 2. Lookup patient id
+    const match = patients.find(p => p.fullName.toUpperCase() === patientName.toUpperCase());
+    if (match) {
+      setActivePatientId(match.id);
+    }
+    
+    // 3. Switch view to Prontuários
+    setActiveView('Prontuários');
+  };
+
+  const handleAddPatient = async (newPatient: Patient) => {
+    try {
+      const response = await apiPost<{ patient: Patient; medicalRecord: MedicalRecord }>('/api/patients', authToken, newPatient);
+      setPatients(prev => [...prev, response.patient]);
+      setMedicalRecords(prev => ({
+        ...prev,
+        [response.patient.id]: response.medicalRecord
+      }));
+      showToast('success', `Paciente ${response.patient.fullName} cadastrado e prontuário inicializado!`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao cadastrar paciente.');
+    }
+  };
+
+  const handleEditPatient = async (editedPatient: Patient) => {
+    try {
+      const response = await apiPut<{ patient: Patient; appointments: Appointment[] }>(`/api/patients/${editedPatient.id}`, authToken, editedPatient);
+      setPatients(prev => prev.map(p => p.id === response.patient.id ? response.patient : p));
+      setAppointments(response.appointments);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao editar paciente.');
+    }
+  };
+
+  const handleAddMedicalRecordEntry = async (patientId: string, entry: MedicalRecordEntry) => {
+    try {
+      const response = await apiPost<{ entry: MedicalRecordEntry; medicalRecord: MedicalRecord; appointments: Appointment[] }>(
+        `/api/medical-records/${patientId}/entries`,
+        authToken,
+        { ...entry, date: currentDate }
+      );
+      setMedicalRecords(prev => ({
+        ...prev,
+        [patientId]: response.medicalRecord
+      }));
+      setAppointments(response.appointments);
+      showToast('success', 'Evolução clínica gravada com sucesso no prontuário eletrônico!');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao gravar evolução clínica.');
+    }
+  };
+
+  const handleUpdateMedicalRecordMetadata = (
+    patientId: string, 
+    metadata: { 
+      bloodType: string; 
+      allergies: string[]; 
+      medications: string[]; 
+      chronicDiseases: string[];
+      gender: string;
+    }
+  ) => {
+    apiPatch<{ medicalRecord: MedicalRecord }>(`/api/medical-records/${patientId}/metadata`, authToken, metadata)
+      .then(response => {
+        setMedicalRecords(prev => ({
+          ...prev,
+          [patientId]: response.medicalRecord
+        }));
+        showToast('success', 'Ficha médica básica do paciente atualizada com sucesso!');
+      })
+      .catch(error => showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar ficha médica.'));
+  };
+
+  const handleMarkPaymentPaid = async (appointmentId: string) => {
+    try {
+      const response = await apiPatch<{ appointment: Appointment }>(`/api/appointments/${appointmentId}/payment`, authToken, { paymentStatus: 'paid' });
+      setAppointments(prev => prev.map(a => a.id === appointmentId ? response.appointment : a));
+      showToast('success', 'Recebimento confirmado!');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao confirmar recebimento.');
+    }
+  };
+
+  const handleAddFinanceTransaction = async (transaction: Omit<FinanceTransaction, 'id' | 'date' | 'status' | 'source'>) => {
+    try {
+      const response = await apiPost<{ transaction: FinanceTransaction }>('/api/finance/transactions', authToken, transaction);
+      setFinanceTransactions(prev => [response.transaction, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao lançar financeiro.');
+    }
+  };
+
+  const handleCreateAgent = async (agent: Omit<ServiceAgent, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const response = await apiPost<{ agent: ServiceAgent }>('/api/agents', authToken, agent);
+      setServiceAgents(prev => [response.agent, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar agente.');
+    }
+  };
+
+  const handleUpdateAgent = async (id: string, patch: Partial<ServiceAgent>) => {
+    try {
+      const response = await apiPatch<{ agent: ServiceAgent }>(`/api/agents/${id}`, authToken, patch);
+      setServiceAgents(prev => prev.map(item => item.id === id ? response.agent : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar agente.');
+    }
+  };
+
+  const handleCreateCampaign = async (campaign: Omit<MarketingCampaign, 'id' | 'status' | 'leads'>) => {
+    try {
+      const response = await apiPost<{ campaign: MarketingCampaign }>('/api/marketing/campaigns', authToken, campaign);
+      setMarketingCampaigns(prev => [response.campaign, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar campanha.');
+    }
+  };
+
+  const handleUpdateCampaign = async (id: string, patch: Partial<MarketingCampaign>) => {
+    try {
+      const response = await apiPatch<{ campaign: MarketingCampaign }>(`/api/marketing/campaigns/${id}`, authToken, patch);
+      setMarketingCampaigns(prev => prev.map(item => item.id === id ? response.campaign : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar campanha.');
+    }
+  };
+
+  const handleCreateTissGuide = async (guide: Omit<TissGuide, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const response = await apiPost<{ guide: TissGuide }>('/api/tiss/guides', authToken, guide);
+      setTissGuides(prev => [response.guide, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar guia TISS.');
+    }
+  };
+
+  const handleUpdateTissGuide = async (id: string, patch: Partial<TissGuide>) => {
+    try {
+      const response = await apiPatch<{ guide: TissGuide }>(`/api/tiss/guides/${id}`, authToken, patch);
+      setTissGuides(prev => prev.map(item => item.id === id ? response.guide : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar guia TISS.');
+    }
+  };
+
+  const handleCreateInventoryItem = async (item: Omit<InventoryItem, 'id'>) => {
+    try {
+      const response = await apiPost<{ item: InventoryItem }>('/api/inventory/items', authToken, item);
+      setInventoryItems(prev => [response.item, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar item de estoque.');
+    }
+  };
+
+  const handleUpdateInventoryItem = async (id: string, patch: Partial<InventoryItem>) => {
+    try {
+      const response = await apiPatch<{ item: InventoryItem }>(`/api/inventory/items/${id}`, authToken, patch);
+      setInventoryItems(prev => prev.map(item => item.id === id ? response.item : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar estoque.');
+    }
+  };
+
+  const handleCreateReferral = async (referral: Omit<ReferralRecord, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const response = await apiPost<{ referral: ReferralRecord }>('/api/referrals', authToken, referral);
+      setReferrals(prev => [response.referral, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao registrar indicação.');
+    }
+  };
+
+  const handleUpdateReferral = async (id: string, patch: Partial<ReferralRecord>) => {
+    try {
+      const response = await apiPatch<{ referral: ReferralRecord }>(`/api/referrals/${id}`, authToken, patch);
+      setReferrals(prev => prev.map(item => item.id === id ? response.referral : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar indicação.');
+    }
+  };
+
+  const handleCreateReference = async (reference: Omit<ReferenceMaterial, 'id' | 'updatedAt'>) => {
+    try {
+      const response = await apiPost<{ reference: ReferenceMaterial }>('/api/references', authToken, reference);
+      setReferences(prev => [response.reference, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar referência.');
+    }
+  };
+
+  const handleCreateHelpTicket = async (ticket: Omit<HelpTicket, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const response = await apiPost<{ ticket: HelpTicket }>('/api/help/tickets', authToken, ticket);
+      setHelpTickets(prev => [response.ticket, ...prev]);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao abrir chamado.');
+    }
+  };
+
+  const handleUpdateHelpTicket = async (id: string, patch: Partial<HelpTicket>) => {
+    try {
+      const response = await apiPatch<{ ticket: HelpTicket }>(`/api/help/tickets/${id}`, authToken, patch);
+      setHelpTickets(prev => prev.map(item => item.id === id ? response.ticket : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar chamado.');
+    }
+  };
+
+  const handleScheduleForPatient = (patientName: string) => {
+    const match = patients.find(p => p.fullName.toUpperCase() === patientName.toUpperCase());
+    if (match) {
+      setSelectedPatientId(match.id);
+    }
+    setIsSchedulingOpen(true);
+  };
+
+  // Filter appointments for active date
+  const filteredAppointments = useMemo(() => {
+    return appointments.filter(a => a.date === currentDate);
+  }, [appointments, currentDate]);
+
+  const localSlotSuggestions = useMemo(() => {
+    if (!selectedDoctor || !selectedDate) return [];
+    if (!selectedDoctor.availableDays.includes(dayName(selectedDate))) return [];
+
+    const suggestions: { date: string; time: string; reason: string }[] = [];
+    const workStart = timeToMinutes(selectedDoctor.workingHours.start);
+    const workEnd = timeToMinutes(selectedDoctor.workingHours.end);
+
+    for (let minutes = workStart; minutes + 30 <= workEnd && suggestions.length < 4; minutes += 30) {
+      const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+      const end = calculateTimeEnd(time);
+      if (isSlotFree(selectedDoctor.id, selectedDate, time, end)) {
+        suggestions.push({ date: selectedDate, time, reason: 'Horario livre validado' });
+      }
+    }
+
+    return suggestions;
+  }, [selectedDoctor, selectedDate, appointments]);
 
   const renderView = () => {
     switch (activeView) {
+      case 'Dashboard':
+        return (
+          <Dashboard 
+            appointments={appointments}
+            patients={patients}
+            doctors={doctors}
+            currentDate={currentDate}
+            onViewChange={setActiveView}
+            onNewAppointment={() => setIsSchedulingOpen(true)}
+            onNewPatient={() => {
+              setActiveView('Pacientes');
+              // We could automatically open the modal by dispatching event but opening view is fine.
+            }}
+          />
+        );
       case 'Agenda':
         return (
           <>
-            <AgendaSubHeader />
+            <AgendaSubHeader 
+              currentDate={currentDate}
+              onDateChange={setCurrentDate}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              searchTerm={agendaSearch}
+              onSearchChange={setAgendaSearch}
+            />
             <div className="flex-1 overflow-hidden relative">
-              <AppointmentTable />
+              {viewMode === 'list' ? (
+                <AppointmentTable 
+                  appointments={filteredAppointments}
+                  patients={patients}
+                  searchTerm={agendaSearch}
+                  onUpdateStatus={handleUpdateAppointmentStatus}
+                  onStartConsultation={handleStartConsultation}
+                />
+              ) : (
+                <AgendaCalendar 
+                  currentDate={currentDate}
+                  onDateChange={setCurrentDate}
+                  appointments={appointments}
+                />
+              )}
             </div>
           </>
         );
       case 'Pacientes':
-        return <Patients />;
+        return (
+          <Patients 
+            patients={patients}
+            onAddPatient={handleAddPatient}
+            onEditPatient={handleEditPatient}
+            onViewMedicalRecord={(id) => {
+              setActivePatientId(id);
+              setActiveView('Prontuários');
+            }}
+            onScheduleForPatient={handleScheduleForPatient}
+          />
+        );
       case 'Prontuários':
-        return <MedicalRecords />;
+        return (
+          <MedicalRecords 
+            patients={patients}
+            medicalRecords={medicalRecords}
+            doctors={doctors}
+            onAddMedicalRecordEntry={handleAddMedicalRecordEntry}
+            onUpdateMedicalRecordMetadata={handleUpdateMedicalRecordMetadata}
+            activePatientId={activePatientId}
+            onActivePatientIdChange={setActivePatientId}
+          />
+        );
       case 'Mensagens':
-        return <ChatAssistant />;
+        return <WhatsAppInbox token={authToken} onOpenConnections={() => setActiveView('Conexoes')} />;
+      case 'Conexoes':
+        return <WhatsAppConnections token={authToken} />;
+      case 'Assistente IA':
+        return <ChatAssistant token={authToken} doctors={doctors} appointments={appointments} patients={patients} />;
+      case 'Central de Agentes':
+        return (
+          <AgentsHub
+            agents={serviceAgents}
+            onCreateAgent={handleCreateAgent}
+            onUpdateAgent={handleUpdateAgent}
+          />
+        );
+      case 'Consulta Interativa':
+        return <InteractiveConsultation appointments={appointments} patients={patients} doctors={doctors} />;
+      case 'Marketing':
+        return (
+          <MarketingModule
+            campaigns={marketingCampaigns}
+            agents={serviceAgents}
+            onCreateCampaign={handleCreateCampaign}
+            onUpdateCampaign={handleUpdateCampaign}
+          />
+        );
+      case 'Financeiro':
+        return (
+          <Financeiro 
+            appointments={appointments}
+            financeTransactions={financeTransactions}
+            servicePrices={servicePrices}
+            onMarkPaymentPaid={handleMarkPaymentPaid}
+            onAddTransaction={handleAddFinanceTransaction}
+          />
+        );
+      case 'TISS':
+        return (
+          <TissModule
+            guides={tissGuides}
+            appointments={appointments}
+            onCreateGuide={handleCreateTissGuide}
+            onUpdateGuide={handleUpdateTissGuide}
+          />
+        );
+      case 'Estoques':
+        return (
+          <InventoryModule
+            items={inventoryItems}
+            onCreateItem={handleCreateInventoryItem}
+            onUpdateItem={handleUpdateInventoryItem}
+          />
+        );
+      case 'Relatórios':
+        return (
+          <ReportsModule
+            appointments={appointments}
+            patients={patients}
+            inventoryItems={inventoryItems}
+            campaigns={marketingCampaigns}
+            auditEvents={auditEvents}
+          />
+        );
+      case 'Indique e ganhe':
+        return (
+          <ReferralsModule
+            referrals={referrals}
+            patients={patients}
+            onCreateReferral={handleCreateReferral}
+            onUpdateReferral={handleUpdateReferral}
+          />
+        );
+      case 'Referências':
+        return <ReferencesModule references={references} onCreateReference={handleCreateReference} />;
+      case 'Ajuda':
+        return (
+          <HelpModule
+            tickets={helpTickets}
+            onCreateTicket={handleCreateHelpTicket}
+            onUpdateTicket={handleUpdateHelpTicket}
+          />
+        );
       default:
         return (
           <div className="flex-1 flex items-center justify-center bg-slate-50 p-6">
@@ -106,7 +696,33 @@ export default function App() {
     }
   };
 
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm text-center">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm font-bold text-slate-600">Carregando ambiente da clínica...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authToken || !currentUser) {
+    return (
+      <>
+        {bootstrapError && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-rose-50 border border-rose-100 text-rose-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm">
+            {bootstrapError}
+          </div>
+        )}
+        <Login onLogin={handleLogin} />
+      </>
+    );
+  }
+
   return (
+    <ToastProvider>
+      <ToastListener />
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
       {/* Sidebar Overlay for Mobile */}
       {isSidebarOpen && (
@@ -117,30 +733,39 @@ export default function App() {
       )}
 
       <div className={`fixed inset-y-0 left-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out`}>
-        <Sidebar activeView={activeView} onViewChange={(view) => {
+        <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
           setActiveView(view);
           setIsSidebarOpen(false);
         }} />
       </div>
       
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <Header onMenuClick={() => setIsSidebarOpen(true)} />
+        <Header 
+          onMenuClick={() => setIsSidebarOpen(true)} 
+          activeView={activeView}
+          currentDate={currentDate}
+          onNewAppointment={() => setIsSchedulingOpen(true)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
         
         {renderView()}
 
         {/* Floating Action Buttons */}
-        {activeView !== 'Mensagens' && (
+        {!['Mensagens', 'Conexoes', 'Assistente IA'].includes(activeView) && (
           <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 flex flex-col gap-4 z-30">
             <button 
               onClick={() => setIsSchedulingOpen(true)}
               className="w-14 h-14 md:w-16 md:h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
+              title="Novo Agendamento"
             >
               <Plus size={28} className="group-hover:rotate-90 transition-transform" />
             </button>
             
             <button 
-              onClick={() => setActiveView('Mensagens')}
+              onClick={() => setActiveView('Assistente IA')}
               className="w-12 h-12 md:w-14 md:h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-xl shadow-amber-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
+              title="Assistente IA"
             >
               <MessageSquareText size={24} className="group-hover:rotate-12 transition-transform" />
             </button>
@@ -178,6 +803,7 @@ export default function App() {
               <div className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
+                    {/* Patient selection */}
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <User size={14} className="text-blue-500" />
@@ -186,13 +812,14 @@ export default function App() {
                       <select 
                         value={selectedPatientId}
                         onChange={(e) => setSelectedPatientId(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full appearance-none font-bold transition-all"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold transition-all"
                       >
                         <option value="">Selecione um paciente...</option>
-                        {MOCK_PATIENTS.map(p => <option key={p.id} value={p.id}>{p.fullName}</option>)}
+                        {patients.map(p => <option key={p.id} value={p.id}>{p.fullName}</option>)}
                       </select>
                     </div>
 
+                    {/* Doctor selection */}
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <Stethoscope size={14} className="text-indigo-500" />
@@ -201,28 +828,34 @@ export default function App() {
                       <select 
                         value={selectedDoctorId}
                         onChange={(e) => setSelectedDoctorId(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-indigo-100 outline-none w-full appearance-none font-bold transition-all"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-indigo-100 outline-none w-full font-bold transition-all"
                       >
                         <option value="">Selecione o médico...</option>
-                        {MOCK_DOCTORS.map(d => <option key={d.id} value={d.id}>{d.name} — {d.specialty}</option>)}
+                        {doctors.map(d => <option key={d.id} value={d.id}>{d.name} - {d.specialty}</option>)}
                       </select>
                     </div>
 
+                    {/* Procedure */}
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <Plus size={14} className="text-emerald-500" />
                         Procedimento
                       </label>
-                      <input 
-                        type="text" 
-                        placeholder="Ex: Consulta Particular" 
-                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-emerald-100 outline-none font-bold transition-all w-full" 
-                      />
+                      <select
+                        value={selectedProcedure}
+                        onChange={(e) => setSelectedProcedure(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-emerald-100 outline-none w-full font-bold transition-all"
+                      >
+                        {servicePrices.map(price => (
+                          <option key={price.id} value={price.name}>{price.name} - R$ {price.value.toFixed(2)}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
+                      {/* Date */}
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <Calendar size={14} className="text-blue-500" />
@@ -235,6 +868,8 @@ export default function App() {
                           className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-blue-100 outline-none font-bold transition-all" 
                         />
                       </div>
+                      
+                      {/* Time */}
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <Clock size={14} className="text-blue-500" />
@@ -263,18 +898,16 @@ export default function App() {
                           <div className="mb-4 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2">
                             <Clock size={14} className="text-rose-500 mt-0.5 shrink-0" />
                             <p className="text-[10px] font-bold text-rose-700 leading-tight">
-                              Este horário já está reservado para outro paciente. Veja as alternativas abaixo.
+                              Este horário já está reservado. Escolha uma sugestão livre abaixo.
                             </p>
                           </div>
                         )}
 
                         <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-[180px] p-1">
-                          {(hasConflict ? aiSuggestions : [
-                            { date: '2025-04-03', time: '14:30', reason: 'Horário alternativo' },
-                            { date: '2025-04-04', time: '09:00', reason: 'Horário alternativo' },
-                          ]).map((s, idx) => (
+                          {(hasConflict ? aiSuggestions : localSlotSuggestions).map((s, idx) => (
                             <button 
                               key={idx}
+                              type="button"
                               onClick={() => {
                                 setSelectedDate(s.date);
                                 setSelectedTime(s.time);
@@ -297,6 +930,9 @@ export default function App() {
                           {hasConflict && aiSuggestions.length === 0 && !isAiLoading && (
                             <p className="text-xs text-slate-400 text-center py-4 italic">Nenhuma sugestão encontrada pelo assistente.</p>
                           )}
+                          {!hasConflict && localSlotSuggestions.length === 0 && (
+                            <p className="text-xs text-slate-400 text-center py-4 italic">Nao ha horarios livres para este profissional nesta data.</p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -305,15 +941,8 @@ export default function App() {
 
                 <div className="flex items-center gap-4 pt-6">
                   <button 
-                    onClick={() => {
-                      alert('Notificações enviadas para o paciente via e-mail e SMS!');
-                      setIsSchedulingOpen(false);
-                      // Reset states
-                      setSelectedPatientId('');
-                      setSelectedDoctorId('');
-                      setSelectedDate('');
-                      setSelectedTime('');
-                    }}
+                    type="button"
+                    onClick={handleAddAppointment}
                     disabled={!selectedPatientId || !selectedDoctorId || !selectedDate || !selectedTime || hasConflict}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl py-5 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
                   >
@@ -326,6 +955,6 @@ export default function App() {
         )}
       </main>
     </div>
+    </ToastProvider>
   );
 }
-
