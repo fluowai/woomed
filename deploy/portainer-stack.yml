@@ -140,8 +140,8 @@ services:
 
 networks:
   consultio-net:
-    name: consultio-network
-    driver: bridge
+    name: woopanel1
+    external: true
 
 volumes:
   postgres_data:
