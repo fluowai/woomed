@@ -2,11 +2,15 @@
 # Consultio Med - Portainer Stack (Docker Compose v3.8+)
 # ============================================================
 # Uso no Portainer:
-#   1. Stacks > Add stack > name: consultio-med
-#   2. Build method: Git Repository ou Webhook
-#   3. Repository URL: seu-repositorio
-#   4. Stack file path: deploy/portainer-stack.yml
-#   5. Environment variables: preencher do portainer.env.example
+#   1. Stacks > Add stack > Name: consultio-med
+#   2. Build method: Git Repository
+#   3. Repository URL: https://github.com/fluowai/woomed
+#   4. Branch: codex/beta-test-hardening
+#   5. Stack file path: deploy/portainer-stack.yml
+#   6. Envs: cole o conteudo de deploy/portainer.env.example
+#
+# Uso no Docker Desktop:
+#   docker compose -f deploy/portainer-stack.yml --env-file deploy/portainer.env.example up -d
 # ============================================================
 
 services:
@@ -20,7 +24,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ${SCRIPT_INIT_DB:-./scripts/init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - consultio-net
     healthcheck:
@@ -37,7 +41,7 @@ services:
 
   whatsmeow-bridge:
     build:
-      context: /whatsmeow-bridge
+      context: ./whatsmeow-bridge
       dockerfile: Dockerfile
     container_name: consultio-whatsmeow
     restart: unless-stopped
@@ -60,44 +64,54 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   consultio-med:
     build:
-      context: /
+      context: ./
       dockerfile: Dockerfile
     container_name: consultio-med
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 5173
-      APP_URL: ${APP_URL}
-      DATABASE_URL: ${DATABASE_URL}
+      APP_URL: ${APP_URL:-http://localhost:5173}
+      DATABASE_URL: postgresql://consultio:${DB_PASSWORD}@postgres:5432/consultio
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       WHATSMEOW_API_URL: http://whatsmeow-bridge:8080
       WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
       WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
       VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-true}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     volumes:
       - consultio_med_data:/app/data
       - consultio_uploads:/app/uploads
     networks:
       - consultio-net
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   caddy:
     image: caddy:2-alpine
@@ -107,9 +121,10 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      APP_DOMAIN: ${APP_DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL}
+      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:5173}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@consultio.local}
     volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -117,6 +132,11 @@ services:
     depends_on:
       consultio-med:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   consultio-net:
