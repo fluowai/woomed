@@ -1,14 +1,17 @@
 {
-  "name": "react-example",
+  "name": "consultio-med",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); require('fs').rmSync('server.js',{force:true})\"",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --experimental-vm-modules scripts/test-smoke.mjs",
+    "db:migrate": "node scripts/apply-migrations.mjs",
+    "ci": "npm run lint && npm run build && npm test"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -20,6 +23,7 @@
     "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",

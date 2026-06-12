@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData } from "../data";
 import { AuthedRequest, sessions, requireAuth, requireRoles } from "../middleware";
@@ -6,60 +7,129 @@ import { hashPassword, verifyPassword, generateTokens, verifyToken, verifyRefres
 import { createUser, updateUser, deleteUser, listUsers, generateInvite } from "../users";
 import { registerConsent, getPatientConsents } from "../lgpd";
 import { createBackup, listBackups, restoreBackup, scheduleAutoBackup } from "../backup";
+import { isDatabaseAvailable, queryOne, query } from "../database";
+
+interface DbUser {
+  id: string;
+  tenant_id?: string;
+  email?: string;
+  name: string;
+  password_hash?: string;
+  role: string;
+  specialty?: string;
+  mfa_secret?: string;
+  mfa_enabled?: boolean;
+  is_active?: boolean;
+}
+
+async function findUserByEmail(email: string) {
+  if (isDatabaseAvailable()) {
+    try {
+      const row = await queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+      if (row) return row;
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+}
+
+async function findUserById(id: string) {
+  if (isDatabaseAvailable()) {
+    try {
+      const row = await queryOne<DbUser>("SELECT * FROM users WHERE id = $1", [id]);
+      if (row) return row;
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  return data.users.find(u => u.id === id);
+}
+
+function dbUserToApp(db: DbUser | Record<string, any>) {
+  return { id: db.id, name: db.name, role: db.role, specialty: db.specialty, tenantId: db.tenant_id };
+}
+
+async function saveUserMfa(userId: string, mfaSecret: string, mfaEnabled: boolean) {
+  if (isDatabaseAvailable()) {
+    try {
+      await query("UPDATE users SET mfa_secret = $1, mfa_enabled = $2 WHERE id = $3", [mfaSecret, mfaEnabled, userId]);
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  const user = data.users.find(u => u.id === userId);
+  if (user) {
+    user.mfaSecret = mfaSecret;
+    user.mfaEnabled = mfaEnabled;
+    await saveData(data);
+  }
+}
+
+async function saveUserPassword(userId: string, passwordHash: string) {
+  if (isDatabaseAvailable()) {
+    try {
+      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  const user = data.users.find(u => u.id === userId);
+  if (user) {
+    user.passwordHash = passwordHash;
+    await saveData(data);
+  }
+}
 
 export function registerPhase1Routes(app: Express) {
   // === AUTH (JWT) ===
   app.post("/api/v2/auth/login", async (req, res) => {
     const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "Email e senha sao obrigatorios." });
+    if (!email || !password) return res.status(400).json({ error: "Email e senha obrigatorios." });
 
     const data = await loadData();
-    const user = data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-    if (!user || !user.passwordHash) {
-      // Fallback to PIN-based login for backward compatibility
+    const dbRow = await findUserByEmail(email);
+
+    if (!dbRow || !((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
       if (process.env.ENABLE_LEGACY_PIN_LOGIN !== "true" && process.env.NODE_ENV === "production") {
         return res.status(401).json({ error: "Email ou senha invalidos." });
       }
       const pinUser = data.users.find(u => u.pin === password && (u.email?.toLowerCase() === email.toLowerCase() || u.name.toLowerCase() === email.toLowerCase()));
       if (!pinUser) return res.status(401).json({ error: "Email ou senha invalidos." });
       const appUser = { id: pinUser.id, name: pinUser.name, role: pinUser.role, specialty: pinUser.specialty };
-      const token = require("crypto").randomUUID();
+      const token = randomUUID();
       sessions.set(token, appUser);
-      audit(data, appUser, "login", "session", token, "Login PIN (legacy)");
-      await saveData(data);
+      await audit(data, appUser, "login", "session", token, "Login PIN (legacy)");
       return res.json({ token, user: appUser, legacy: true });
     }
 
-    if (!verifyPassword(password, user.passwordHash)) {
+    const passwordHash = (dbRow as any).password_hash || (dbRow as any).passwordHash;
+    if (!verifyPassword(password, passwordHash)) {
       return res.status(401).json({ error: "Email ou senha invalidos." });
     }
 
-    const appUser = { id: user.id, name: user.name, role: user.role as any, specialty: user.specialty, tenantId: user.tenantId };
+    const appUser = dbUserToApp(dbRow);
+    if (typeof appUser.role === "string" && ["super_admin", "admin", "doctor", "reception", "finance"].includes(appUser.role) === false) {
+      appUser.role = "reception" as any;
+    }
 
-    // MFA check
-    if (user.mfaEnabled) {
-      const mfaToken = require("crypto").randomUUID();
+    if ((dbRow as any).mfa_enabled || (dbRow as any).mfaEnabled) {
+      const mfaToken = randomUUID();
       sessions.set(`mfa:${mfaToken}`, appUser);
-      return res.json({ mfaRequired: true, mfaToken, userId: user.id });
+      return res.json({ mfaRequired: true, mfaToken, userId: (dbRow as any).id });
     }
 
     const tokens = generateTokens(appUser);
-    audit(data, appUser, "login", "session", tokens.token, "Login JWT");
-    await saveData(data);
+    await audit(data, appUser, "login", "session", tokens.token, "Login JWT");
     res.json({ ...tokens, user: appUser });
   });
 
   app.post("/api/v2/auth/mfa/verify", async (req, res) => {
     const { mfaToken, userId, code } = req.body || {};
     const data = await loadData();
-    const user = data.users.find(u => u.id === userId);
-    if (!user || !user.mfaSecret) return res.status(401).json({ error: "MFA nao configurado." });
-    if (!verifyMFAToken(user.mfaSecret, code)) return res.status(401).json({ error: "Codigo MFA invalido." });
-    const appUser = { id: user.id, name: user.name, role: user.role as any, specialty: user.specialty, tenantId: user.tenantId };
+    const dbRow = await findUserById(userId);
+    if (!dbRow || !(dbRow as any).mfa_secret) return res.status(401).json({ error: "MFA nao configurado." });
+    if (!verifyMFAToken((dbRow as any).mfa_secret, code)) return res.status(401).json({ error: "Codigo MFA invalido." });
+    const appUser = dbUserToApp(dbRow);
     const tokens = generateTokens(appUser);
-    audit(data, appUser, "login_mfa", "session", tokens.token, "Login com MFA");
+    await audit(data, appUser, "login_mfa", "session", tokens.token, "Login com MFA");
     sessions.delete(`mfa:${mfaToken}`);
-    await saveData(data);
     res.json({ ...tokens, user: appUser });
   });
 
@@ -68,34 +138,31 @@ export function registerPhase1Routes(app: Express) {
     if (!refreshToken) return res.status(400).json({ error: "Refresh token obrigatorio." });
     const payload = verifyRefreshToken(refreshToken);
     if (!payload) return res.status(401).json({ error: "Refresh token invalido." });
-    const data = await loadData();
-    const user = data.users.find(u => u.id === payload.id);
-    if (!user) return res.status(401).json({ error: "Usuario nao encontrado." });
-    const appUser = { id: user.id, name: user.name, role: user.role as any, specialty: user.specialty, tenantId: user.tenantId };
+    const dbRow = await findUserById(payload.id);
+    if (!dbRow) return res.status(401).json({ error: "Usuario nao encontrado." });
+    const appUser = dbUserToApp(dbRow);
     const tokens = generateTokens(appUser);
     res.json(tokens);
   });
 
   app.post("/api/v2/auth/mfa/setup", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const user = data.users.find(u => u.id === req.user!.id);
-    if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
-    const { secret, qrCodeUrl } = generateMFASecret(user.email || user.name);
-    user.mfaSecret = secret;
-    user.mfaEnabled = false;
-    await saveData(data);
+    const dbRow = await findUserById(req.user!.id);
+    if (!dbRow) return res.status(404).json({ error: "Usuario nao encontrado." });
+    const userEmail = (dbRow as any).email || req.user!.name;
+    const { secret, qrCodeUrl } = generateMFASecret(userEmail);
+    await saveUserMfa(req.user!.id, secret, false);
     res.json({ secret, qrCodeUrl });
   });
 
   app.post("/api/v2/auth/mfa/enable", requireAuth, async (req: AuthedRequest, res) => {
     const { code } = req.body || {};
     const data = await loadData();
-    const user = data.users.find(u => u.id === req.user!.id);
-    if (!user || !user.mfaSecret) return res.status(400).json({ error: "Configure o MFA primeiro." });
-    if (!verifyMFAToken(user.mfaSecret, code)) return res.status(401).json({ error: "Codigo invalido." });
-    user.mfaEnabled = true;
-    audit(data, req.user!, "mfa_enabled", "user", user.id, "MFA ativado");
-    await saveData(data);
+    const dbRow = await findUserById(req.user!.id);
+    if (!dbRow || !(dbRow as any).mfa_secret) return res.status(400).json({ error: "Configure o MFA primeiro." });
+    if (!verifyMFAToken((dbRow as any).mfa_secret, code)) return res.status(401).json({ error: "Codigo invalido." });
+    await saveUserMfa(req.user!.id, (dbRow as any).mfa_secret, true);
+    await audit(data, req.user!, "mfa_enabled", "user", req.user!.id, "MFA ativado");
     res.json({ ok: true });
   });
 
@@ -104,24 +171,24 @@ export function registerPhase1Routes(app: Express) {
     if (!currentPassword || !newPassword) return res.status(400).json({ error: "Senha atual e nova senha obrigatorias." });
     if (newPassword.length < 6) return res.status(400).json({ error: "Nova senha deve ter pelo menos 6 caracteres." });
     const data = await loadData();
-    const user = data.users.find(u => u.id === req.user!.id);
-    if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
-    if (user.passwordHash && !verifyPassword(currentPassword, user.passwordHash)) {
+    const dbRow = await findUserById(req.user!.id);
+    if (!dbRow) return res.status(404).json({ error: "Usuario nao encontrado." });
+    const passwordHash = (dbRow as any).password_hash;
+    if (passwordHash && !verifyPassword(currentPassword, passwordHash)) {
       return res.status(401).json({ error: "Senha atual invalida." });
     }
-    user.passwordHash = hashPassword(newPassword);
-    audit(data, req.user!, "change_password", "user", user.id, "Senha alterada");
-    await saveData(data);
+    await saveUserPassword(req.user!.id, hashPassword(newPassword));
+    await audit(data, req.user!, "change_password", "user", req.user!.id, "Senha alterada");
     res.json({ ok: true });
   });
 
   // === USERS ===
-  app.get("/api/v2/users", requireAuth, requireRoles(["admin"]), async (_req, res) => {
+  app.get("/api/v2/users", requireAuth, requireRoles("admin"), async (_req, res) => {
     const users = await listUsers();
     res.json(users);
   });
 
-  app.post("/api/v2/users", requireAuth, requireRoles(["admin"]), async (req: AuthedRequest, res) => {
+  app.post("/api/v2/users", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     try {
       const user = await createUser(req.body, req.user!);
       res.json(user);
@@ -130,19 +197,19 @@ export function registerPhase1Routes(app: Express) {
     }
   });
 
-  app.put("/api/v2/users/:id", requireAuth, requireRoles(["admin"]), async (req: AuthedRequest, res) => {
+  app.put("/api/v2/users/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const user = await updateUser(req.params.id, req.body, req.user!);
     if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
     res.json(user);
   });
 
-  app.delete("/api/v2/users/:id", requireAuth, requireRoles(["admin"]), async (req: AuthedRequest, res) => {
+  app.delete("/api/v2/users/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const ok = await deleteUser(req.params.id, req.user!);
     if (!ok) return res.status(404).json({ error: "Usuario nao encontrado." });
     res.json({ ok: true });
   });
 
-  app.post("/api/v2/users/invite", requireAuth, requireRoles(["admin"]), async (req: AuthedRequest, res) => {
+  app.post("/api/v2/users/invite", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const { email, role } = req.body || {};
     if (!email || !role) return res.status(400).json({ error: "Email e role obrigatorios." });
     const token = await generateInvite(email, role, req.user!);
@@ -166,7 +233,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   // === BACKUP ===
-  app.post("/api/v2/backup", requireAuth, requireRoles(["admin"]), async (_req, res) => {
+  app.post("/api/v2/backup", requireAuth, requireRoles("admin"), async (_req, res) => {
     try {
       const backupPath = await createBackup();
       res.json({ path: backupPath, message: "Backup criado com sucesso." });
@@ -175,21 +242,26 @@ export function registerPhase1Routes(app: Express) {
     }
   });
 
-  app.get("/api/v2/backup", requireAuth, requireRoles(["admin"]), async (_req, res) => {
+  app.get("/api/v2/backup", requireAuth, requireRoles("admin"), async (_req, res) => {
     const backups = await listBackups();
     res.json(backups);
   });
 
-  app.post("/api/v2/backup/restore", requireAuth, requireRoles(["admin"]), async (req, res) => {
+  app.post("/api/v2/backup/restore", requireAuth, requireRoles("admin"), async (req, res) => {
     const { backupName } = req.body || {};
     if (!backupName) return res.status(400).json({ error: "Nome do backup obrigatorio." });
     const ok = await restoreBackup(backupName);
-    if (!ok) return res.status(400).json({ error: "Falha ao restaurar backup. Verifique se o arquivo existe." });
-    res.json({ ok: true, message: "Backup restaurado. Reinicie o servidor para aplicar." });
+    if (!ok) return res.status(400).json({ error: "Falha ao restaurar backup." });
+    res.json({ ok: true, message: "Backup restaurado. Reinicie o servidor." });
   });
 
-  // === LEGACY AUTH ENHANCEMENTS ===
+  // === LEGACY ===
   app.get("/api/auth/me", requireAuth, (req: AuthedRequest, res) => {
     res.json(req.user);
+  });
+
+  app.get("/api/auth/users", async (_req, res) => {
+    const data = await loadData();
+    res.json(data.users.map(u => ({ id: u.id, name: u.name, role: u.role, specialty: u.specialty })));
   });
 }

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import {
   Activity,
   BarChart3,
@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  DatabaseZap,
   FileText,
   HelpCircle,
   Link,
@@ -15,18 +16,25 @@ import {
   MonitorPlay,
   PackagePlus,
   Plus,
+  ServerCog,
   Send,
   ShieldCheck,
+  Smartphone,
+  Sparkles,
   UsersRound
 } from 'lucide-react';
+import { apiGet } from '../api';
 import {
   Appointment,
+  AgentTemplate,
   AuditEvent,
   ChannelType,
   Doctor,
   HelpTicket,
   InventoryItem,
+  LlmProviderConfig,
   MarketingCampaign,
+  NeuralKnowledgeItem,
   Patient,
   ReferenceMaterial,
   ReferralRecord,
@@ -101,21 +109,121 @@ function SelectInput({ label, value, onChange, options }: { label: string; value
   );
 }
 
+export function LlmSettingsModule({
+  configs,
+  onCreateLlm,
+  onUpdateLlm
+}: {
+  configs: LlmProviderConfig[];
+  onCreateLlm: (config: Omit<LlmProviderConfig, 'id' | 'createdAt' | 'updatedAt' | 'apiKeyMasked' | 'isActive'> & { apiKey?: string }) => void;
+  onUpdateLlm: (id: string, patch: Partial<LlmProviderConfig> & { apiKey?: string }) => void;
+}) {
+  const [name, setName] = useState('OpenAI Atendimento');
+  const [provider, setProvider] = useState('openai');
+  const [model, setModel] = useState('gpt-4.1-mini');
+  const [apiKey, setApiKey] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [temperature, setTemperature] = useState('0.35');
+  const [maxTokens, setMaxTokens] = useState('1200');
+
+  const submit = () => {
+    if (!name || !provider || !model) return;
+    onCreateLlm({
+      name,
+      provider: provider as LlmProviderConfig['provider'],
+      model,
+      apiKey,
+      endpoint,
+      temperature: Number(temperature),
+      maxTokens: Number(maxTokens),
+      isDefault: configs.length === 0
+    });
+    setApiKey('');
+  };
+
+  return (
+    <Shell title="LLMs" subtitle="Cadastre provedores e modelos que os agentes podem usar." icon={<ServerCog size={24} />}>
+      <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-8">
+        <div className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm h-fit space-y-4">
+          <h3 className="font-black text-slate-900">Nova LLM</h3>
+          <TextInput label="Nome" value={name} onChange={setName} />
+          <SelectInput label="Provedor" value={provider} onChange={setProvider} options={[
+            { value: 'openai', label: 'OpenAI' },
+            { value: 'gemini', label: 'Gemini' },
+            { value: 'anthropic', label: 'Anthropic' },
+            { value: 'groq', label: 'Groq' },
+            { value: 'local', label: 'Local/Ollama' }
+          ]} />
+          <TextInput label="Modelo" value={model} onChange={setModel} />
+          <TextInput label="API key" value={apiKey} onChange={setApiKey} type="password" />
+          <TextInput label="Endpoint opcional" value={endpoint} onChange={setEndpoint} />
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Temperatura" value={temperature} onChange={setTemperature} type="number" />
+            <TextInput label="Max tokens" value={maxTokens} onChange={setMaxTokens} type="number" />
+          </div>
+          <button onClick={submit} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs">
+            Cadastrar LLM
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {configs.map(config => (
+            <div key={config.id} className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="font-black text-slate-900">{config.name}</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase mt-1">{config.provider} / {config.model}</p>
+                </div>
+                <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${config.isDefault ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {config.isDefault ? 'padrao' : 'opcional'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center mb-5">
+                <div className="bg-slate-50 rounded-xl p-3"><span className="block text-sm font-black">{config.temperature}</span><span className="text-[9px] font-bold text-slate-400">temp.</span></div>
+                <div className="bg-slate-50 rounded-xl p-3"><span className="block text-sm font-black">{config.maxTokens}</span><span className="text-[9px] font-bold text-slate-400">tokens</span></div>
+                <div className="bg-slate-50 rounded-xl p-3 overflow-hidden"><span className="block text-xs font-black break-all">{config.apiKeyMasked || 'sem key'}</span><span className="text-[9px] font-bold text-slate-400">chave</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => onUpdateLlm(config.id, { isDefault: true })} className="py-2 rounded-xl text-[10px] font-black uppercase bg-blue-50 text-blue-700">Definir padrao</button>
+                <button onClick={() => onUpdateLlm(config.id, { isActive: !config.isActive })} className="py-2 rounded-xl text-[10px] font-black uppercase bg-slate-900 text-white">{config.isActive ? 'Pausar' : 'Ativar'}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
 export function AgentsHub({
   agents,
+  templates,
   onCreateAgent,
-  onUpdateAgent
+  onUpdateAgent,
+  onCreateFromTemplate
 }: {
   agents: ServiceAgent[];
+  templates: AgentTemplate[];
   onCreateAgent: (agent: Omit<ServiceAgent, 'id' | 'createdAt' | 'status'>) => void;
   onUpdateAgent: (id: string, patch: Partial<ServiceAgent>) => void;
+  onCreateFromTemplate: (templateId: string) => void;
 }) {
   const [name, setName] = useState('');
   const [channel, setChannel] = useState<ChannelType>('whatsapp');
   const [objective, setObjective] = useState('');
   const [tone, setTone] = useState('Acolhedor, claro e profissional');
   const [escalationTo, setEscalationTo] = useState('Recepcao');
+  const [connectionId, setConnectionId] = useState('');
+  const [connections, setConnections] = useState<{ id: string; name: string; phoneNumber: string }[]>([]);
   const [rules, setRules] = useState('Nao informar diagnosticos\nEncaminhar urgencias para humano\nValidar identidade antes de dados sensiveis');
+
+  useEffect(() => {
+    const token = localStorage.getItem('consultio_token');
+    if (!token) return;
+    apiGet<{ connections: { id: string; name: string; phoneNumber: string }[] }>('/api/whatsapp/connections', token)
+      .then(data => setConnections(data.connections))
+      .catch(() => {});
+  }, []);
 
   const activeCount = agents.filter(agent => agent.status === 'active').length;
 
@@ -129,10 +237,12 @@ export function AgentsHub({
       escalationTo,
       workingHours: 'Seg-Sex 08:00-18:00',
       rules: rules.split('\n').map(item => item.trim()).filter(Boolean),
-      knowledgeBase: ['Agenda', 'Pacientes', 'Servicos', 'Precos']
+      knowledgeBase: ['Agenda', 'Pacientes', 'Servicos', 'Precos'],
+      connectionId: connectionId || undefined,
     });
     setName('');
     setObjective('');
+    setConnectionId('');
   };
 
   return (
@@ -151,6 +261,10 @@ export function AgentsHub({
             <TextInput label="Objetivo" value={objective} onChange={setObjective} placeholder="Ex: Confirmar consultas e recuperar faltosos" />
             <TextInput label="Tom de voz" value={tone} onChange={setTone} />
             <TextInput label="Escalonar para" value={escalationTo} onChange={setEscalationTo} />
+            <SelectInput label="Vincular WhatsApp" value={connectionId} onChange={setConnectionId} options={[
+              { value: '', label: 'Nenhum (seletor automatico)' },
+              ...connections.map(c => ({ value: c.id, label: `${c.name} (${c.phoneNumber})` }))
+            ]} />
             <label className="flex flex-col gap-1.5">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Regras</span>
               <textarea
@@ -166,16 +280,53 @@ export function AgentsHub({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <h3 className="font-black text-slate-900">Modelos prontos</h3>
+                <p className="text-xs font-bold text-slate-500">{templates.length} agentes para saude e beleza com acoes autonomas.</p>
+              </div>
+              <Sparkles size={20} className="text-blue-500" />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+              {templates.map(template => (
+                <div key={template.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">{template.name}</h4>
+                      <p className="text-[10px] font-bold uppercase text-slate-400 mt-1">{template.segment} / {template.channel}</p>
+                    </div>
+                    <button onClick={() => onCreateFromTemplate(template.id)} className="shrink-0 bg-blue-600 text-white rounded-xl px-3 py-2 text-[10px] font-black uppercase">
+                      Usar
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium mt-3 line-clamp-2">{template.objective}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {template.autonomousActions.slice(0, 3).map(action => (
+                      <span key={action} className="text-[9px] font-bold bg-white border border-slate-200 text-slate-500 rounded-lg px-2 py-1">{action}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {agents.map(agent => (
             <div key={agent.id} className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-black text-slate-900">{agent.name}</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase mt-1">{agent.channel} / {agent.escalationTo}</p>
-                </div>
-                <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${statusClass(agent.status)}`}>{agent.status}</span>
-              </div>
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <h3 className="font-black text-slate-900">{agent.name}</h3>
+                      <p className="text-xs font-bold text-slate-400 uppercase mt-1">{agent.channel} / {agent.escalationTo}</p>
+                      {agent.connectionId && (
+                        <p className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                          <Smartphone size={11} /> WhatsApp vinculado
+                        </p>
+                      )}
+                    </div>
+                    <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${statusClass(agent.status)}`}>{agent.status}</span>
+                  </div>
               <p className="text-sm text-slate-600 font-medium leading-relaxed mb-5">{agent.objective}</p>
               <div className="space-y-2 mb-5">
                 {agent.rules.slice(0, 3).map(rule => (
@@ -195,6 +346,87 @@ export function AgentsHub({
                   </button>
                 ))}
               </div>
+            </div>
+          ))}
+          </div>
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
+export function NeuralModule({
+  knowledge,
+  agents,
+  onCreateKnowledge,
+  onUpdateKnowledge
+}: {
+  knowledge: NeuralKnowledgeItem[];
+  agents: ServiceAgent[];
+  onCreateKnowledge: (item: Omit<NeuralKnowledgeItem, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => void;
+  onUpdateKnowledge: (id: string, patch: Partial<NeuralKnowledgeItem>) => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('Atendimento');
+  const [content, setContent] = useState('');
+  const [tags, setTags] = useState('faq, protocolo');
+  const [targetAgentId, setTargetAgentId] = useState('');
+
+  const submit = () => {
+    if (!title || !content) return;
+    onCreateKnowledge({
+      title,
+      category,
+      content,
+      sourceType: 'manual',
+      targetAgentIds: targetAgentId ? [targetAgentId] : [],
+      tags: tags.split(',').map(item => item.trim()).filter(Boolean)
+    });
+    setTitle('');
+    setContent('');
+  };
+
+  return (
+    <Shell title="Neural" subtitle="Envie conhecimento para os agentes usarem em atendimento e automacoes." icon={<DatabaseZap size={24} />}>
+      <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-8">
+        <div className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm h-fit space-y-4">
+          <h3 className="font-black text-slate-900">Novo conhecimento</h3>
+          <TextInput label="Titulo" value={title} onChange={setTitle} placeholder="Ex: Politica de retorno" />
+          <TextInput label="Categoria" value={category} onChange={setCategory} />
+          <SelectInput label="Enviar para agente" value={targetAgentId} onChange={setTargetAgentId} options={[{ value: '', label: 'Todos os agentes' }, ...agents.map(agent => ({ value: agent.id, label: agent.name }))]} />
+          <TextInput label="Tags" value={tags} onChange={setTags} />
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Conteudo</span>
+            <textarea
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              rows={8}
+              className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+              placeholder="Cole protocolos, FAQs, politica da clinica ou orientacoes operacionais."
+            />
+          </label>
+          <button onClick={submit} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs">
+            Indexar conhecimento
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {knowledge.map(item => (
+            <div key={item.id} className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="font-black text-slate-900">{item.title}</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase mt-1">{item.category}</p>
+                </div>
+                <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${statusClass(item.status)}`}>{item.status}</span>
+              </div>
+              <p className="text-sm text-slate-600 font-medium leading-relaxed mb-4 line-clamp-4">{item.content}</p>
+              <div className="flex flex-wrap gap-1.5 mb-5">
+                {item.tags.map(tag => <span key={tag} className="text-[9px] font-bold bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-2 py-1">{tag}</span>)}
+              </div>
+              <button onClick={() => onUpdateKnowledge(item.id, { status: item.status === 'indexed' ? 'archived' : 'indexed' })} className="w-full bg-slate-900 text-white rounded-xl py-3 text-xs font-black uppercase">
+                {item.status === 'indexed' ? 'Arquivar' : 'Indexar'}
+              </button>
             </div>
           ))}
         </div>

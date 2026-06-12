@@ -104,7 +104,7 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           <div className="flex gap-2 mb-6 bg-slate-100 rounded-2xl p-1">
-            {users.length > 0 && (
+            {import.meta.env.DEV && users.length > 0 && (
               <button type="button" onClick={() => setTab('pin')} className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${tab === 'pin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                 <LockKeyhole size={14} className="inline mr-1.5" /> PIN
               </button>
@@ -153,6 +153,11 @@ export default function Login({ onLogin }: LoginProps) {
           {tab === 'pin' && (
             <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-[11px] text-slate-500 leading-relaxed">
               Acesso por PIN e legado e deve ficar restrito a ambientes internos de teste.
+            </div>
+          )}
+          {import.meta.env.PROD && !import.meta.env.DEV && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-700 leading-relaxed">
+              Configure a GEMINI_API_KEY no arquivo .env.local para ativar o assistente de IA.
             </div>
           )}
         </form>

@@ -18,3 +18,15 @@ View your app in AI Studio: https://ai.studio/apps/415496ab-7c56-43d5-af33-a641a
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## WhatsApp / Whatsmeow
+
+O projeto inclui um bridge Go interno em `whatsmeow-bridge/` usando a biblioteca Whatsmeow.
+
+Para subir tudo junto:
+
+```bash
+docker compose up --build
+```
+
+No Docker/Portainer, o backend usa `WHATSMEOW_API_URL=http://whatsmeow-bridge:8080` e o bridge entrega eventos em `http://consultio-med:5173/api/whatsapp/webhook`. As sessoes pareadas ficam no volume `consultio_whatsmeow_data`.

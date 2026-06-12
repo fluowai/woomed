@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare module "ws" {
   import type { IncomingMessage, Server as HttpServer } from "http";
 
@@ -10,7 +12,9 @@ declare module "ws" {
   }
 
   export class WebSocketServer {
-    constructor(options: { server: HttpServer; path?: string });
+    constructor(options: { server?: HttpServer; path?: string; noServer?: boolean });
     on(event: "connection", listener: (socket: WebSocket, request: IncomingMessage) => void): this;
+    emit(event: string | symbol, ...args: unknown[]): boolean;
+    handleUpgrade(request: IncomingMessage, socket: import("net").Socket | import("stream").Duplex, head: Buffer, cb: (ws: WebSocket) => void): void;
   }
 }

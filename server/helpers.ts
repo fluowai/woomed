@@ -2,9 +2,10 @@ import { randomUUID } from "crypto";
 import { AppUser } from "../src/types";
 import { AppData } from "./data";
 import { Doctor, Appointment, ServicePrice } from "../src/types";
+import { isDatabaseAvailable } from "./database";
 
-export function audit(data: AppData, user: AppUser, action: string, entity: string, entityId: string, details?: string) {
-  data.auditEvents.push({
+export async function audit(data: AppData, user: AppUser, action: string, entity: string, entityId: string, details?: string) {
+  const entry = {
     id: randomUUID(),
     createdAt: new Date().toISOString(),
     actorId: user.id,
@@ -13,7 +14,21 @@ export function audit(data: AppData, user: AppUser, action: string, entity: stri
     entity,
     entityId,
     details
-  });
+  };
+  data.auditEvents.push(entry);
+
+  if (isDatabaseAvailable()) {
+    try {
+      const { query } = await import("./database");
+      await query(
+        `INSERT INTO audit_events (id, tenant_id, actor_id, actor_name, action, entity, entity_id, details, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [entry.id, user.tenantId || null, user.id, user.name, action, entity, entityId, details || null]
+      );
+    } catch (err) {
+      console.warn("[Audit] PG write failed:", (err as Error).message);
+    }
+  }
 }
 
 export function timeToMinutes(time: string) {

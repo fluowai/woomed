@@ -1,6 +1,8 @@
 import path from "path";
 import fs from "fs/promises";
-import { AppUser, Patient, Doctor, Appointment, MedicalRecord, FinanceTransaction, ServicePrice, AuditEvent, ServiceAgent, MarketingCampaign, TissGuide, InventoryItem, ReferralRecord, ReferenceMaterial, HelpTicket, WhatsAppConnection, WhatsAppConversation, WhatsAppMessage, PatientDocument, WaitingListEntry, ScheduleBlock, MedicalTemplate, AccountsPayable, PaymentGatewayConfig, DEFAULT_SERVICE_PRICES, MOCK_PATIENTS, MOCK_DOCTORS, MOCK_APPOINTMENTS, MOCK_MEDICAL_RECORDS, MOCK_FINANCE_TRANSACTIONS, MOCK_SERVICE_AGENTS, MOCK_MARKETING_CAMPAIGNS, MOCK_TISS_GUIDES, MOCK_INVENTORY_ITEMS, MOCK_REFERRALS, MOCK_REFERENCES, MOCK_HELP_TICKETS, MOCK_WHATSAPP_CONNECTIONS, MOCK_WHATSAPP_CONVERSATIONS, MOCK_WHATSAPP_MESSAGES } from "../src/types";
+import { isDatabaseAvailable } from "./database";
+import { AppUser, Patient, Doctor, Appointment, MedicalRecord, FinanceTransaction, ServicePrice, AuditEvent, ServiceAgent, MarketingCampaign, TissGuide, InventoryItem, ReferralRecord, ReferenceMaterial, HelpTicket, WhatsAppConnection, WhatsAppConversation, WhatsAppMessage, PatientDocument, WaitingListEntry, ScheduleBlock, MedicalTemplate, AccountsPayable, PaymentGatewayConfig, LlmProviderConfig, AgentTemplate, NeuralKnowledgeItem, Tenant, SaaSPlan, PlatformOwner, DEFAULT_SERVICE_PRICES } from "../src/types";
+import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_KNOWLEDGE } from "../src/aiCatalog";
 
 export interface ServerUser extends AppUser {
   pin: string;
@@ -37,6 +39,12 @@ export interface AppData {
   medicalTemplates: MedicalTemplate[];
   accountsPayable: AccountsPayable[];
   paymentGatewayConfig: PaymentGatewayConfig[];
+  llmProviderConfigs: LlmProviderConfig[];
+  agentTemplates: AgentTemplate[];
+  neuralKnowledge: NeuralKnowledgeItem[];
+  tenants: Tenant[];
+  plans: SaaSPlan[];
+  platformOwners: PlatformOwner[];
 }
 
 export const dataDir = path.join(process.cwd(), "data");
@@ -56,29 +64,35 @@ function hydrateSeedUserFields(users: ServerUser[]): ServerUser[] {
 export function defaultData(): AppData {
   return {
     users: seedUsers,
-    patients: MOCK_PATIENTS,
-    doctors: MOCK_DOCTORS,
-    appointments: MOCK_APPOINTMENTS,
-    medicalRecords: MOCK_MEDICAL_RECORDS,
-    financeTransactions: MOCK_FINANCE_TRANSACTIONS,
+    patients: [],
+    doctors: [],
+    appointments: [],
+    medicalRecords: {},
+    financeTransactions: [],
     servicePrices: DEFAULT_SERVICE_PRICES,
     auditEvents: [],
-    serviceAgents: MOCK_SERVICE_AGENTS,
-    marketingCampaigns: MOCK_MARKETING_CAMPAIGNS,
-    tissGuides: MOCK_TISS_GUIDES,
-    inventoryItems: MOCK_INVENTORY_ITEMS,
-    referrals: MOCK_REFERRALS,
-    references: MOCK_REFERENCES,
-    helpTickets: MOCK_HELP_TICKETS,
-    whatsappConnections: MOCK_WHATSAPP_CONNECTIONS,
-    whatsappConversations: MOCK_WHATSAPP_CONVERSATIONS,
-    whatsappMessages: MOCK_WHATSAPP_MESSAGES,
+    serviceAgents: [],
+    marketingCampaigns: [],
+    tissGuides: [],
+    inventoryItems: [],
+    referrals: [],
+    references: [],
+    helpTickets: [],
+    whatsappConnections: [],
+    whatsappConversations: [],
+    whatsappMessages: [],
     patientDocuments: [],
     waitingList: [],
     scheduleBlocks: [],
     medicalTemplates: [],
     accountsPayable: [],
-    paymentGatewayConfig: []
+    paymentGatewayConfig: [],
+    llmProviderConfigs: DEFAULT_LLM_PROVIDER_CONFIGS,
+    agentTemplates: DEFAULT_AGENT_TEMPLATES,
+    neuralKnowledge: DEFAULT_NEURAL_KNOWLEDGE,
+    tenants: [],
+    plans: [],
+    platformOwners: []
   };
 }
 
@@ -113,7 +127,13 @@ export async function loadData(): Promise<AppData> {
       scheduleBlocks: parsed.scheduleBlocks || [],
       medicalTemplates: parsed.medicalTemplates || [],
       accountsPayable: parsed.accountsPayable || [],
-      paymentGatewayConfig: parsed.paymentGatewayConfig || []
+      paymentGatewayConfig: parsed.paymentGatewayConfig || [],
+      llmProviderConfigs: parsed.llmProviderConfigs || def.llmProviderConfigs,
+      agentTemplates: parsed.agentTemplates || def.agentTemplates,
+      neuralKnowledge: parsed.neuralKnowledge || def.neuralKnowledge,
+      tenants: parsed.tenants || def.tenants,
+      plans: parsed.plans || def.plans,
+      platformOwners: parsed.platformOwners || def.platformOwners
     };
     return cachedData;
   } catch {

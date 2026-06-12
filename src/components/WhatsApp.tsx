@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Circle,
+  Download,
+  FileAudio,
+  FileText,
   Image,
   Pencil,
   Plus,
@@ -11,14 +14,16 @@ import {
   Search,
   Send,
   Smartphone,
+  Trash2,
   Unplug,
   UserRound,
   Users,
+  Video,
   Wifi,
   WifiOff,
   X
 } from 'lucide-react';
-import { apiGet, apiPatch, apiPost } from '../api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '../api';
 import {
   WhatsAppConnection,
   WhatsAppConversation,
@@ -31,7 +36,6 @@ interface WhatsAppProps {
 }
 
 interface ConnectionsResponse {
-  bridgeConfigured: boolean;
   connections: WhatsAppConnection[];
 }
 
@@ -126,6 +130,67 @@ function Avatar({ src, label, group = false }: { src?: string; label: string; gr
   );
 }
 
+function formatFileSize(bytes?: number) {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function MediaAttachment({ message }: { message: WhatsAppMessage }) {
+  if (message.type === 'image') {
+    if (message.mediaUrl) {
+      return <img src={message.mediaUrl} alt={message.mediaFileName || 'Imagem da mensagem'} className="mb-3 max-h-72 rounded-lg object-cover border border-white/30" />;
+    }
+    return (
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold opacity-80">
+        <Image size={14} />
+        Imagem recebida
+      </div>
+    );
+  }
+
+  if (message.type === 'audio') {
+    return (
+      <div className="mb-2 rounded-lg bg-black/5 p-2">
+        {message.mediaUrl ? (
+          <audio src={message.mediaUrl} controls className="w-full h-9" />
+        ) : (
+          <div className="flex items-center gap-2 text-xs font-bold opacity-80"><FileAudio size={14} /> Audio recebido</div>
+        )}
+      </div>
+    );
+  }
+
+  if (message.type === 'video') {
+    return message.mediaUrl ? (
+      <video src={message.mediaUrl} controls className="mb-3 max-h-72 rounded-lg border border-white/30" />
+    ) : (
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold opacity-80"><Video size={14} /> Video recebido</div>
+    );
+  }
+
+  if (message.type === 'document') {
+    const label = message.mediaFileName || message.mediaMimeType || 'Documento recebido';
+    return (
+      <a
+        href={message.mediaUrl || '#'}
+        target="_blank"
+        rel="noreferrer"
+        className={`mb-2 flex items-center gap-3 rounded-lg p-3 ${message.fromMe ? 'bg-white/15 text-white' : 'bg-slate-50 text-slate-700'}`}
+      >
+        <FileText size={18} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-black truncate">{label}</span>
+          <span className="block text-[10px] font-semibold opacity-70">{formatFileSize(message.mediaSize) || message.mediaMimeType || 'PDF/DOC'}</span>
+        </span>
+        {message.mediaUrl && <Download size={15} />}
+      </a>
+    );
+  }
+
+  return null;
+}
+
 function ConnectionBadge({ status }: { status: WhatsAppConnection['status'] }) {
   const style = statusStyles[status] || statusStyles.disconnected;
   return (
@@ -138,17 +203,15 @@ function ConnectionBadge({ status }: { status: WhatsAppConnection['status'] }) {
 
 export function WhatsAppConnections({ token }: WhatsAppProps) {
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
-  const [bridgeConfigured, setBridgeConfigured] = useState(false);
-  const [name, setName] = useState('Recepcao WhatsApp');
-  const [phoneNumber, setPhoneNumber] = useState('+5548988003260');
+  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const loadConnections = useCallback(async () => {
     const response = await apiGet<ConnectionsResponse>('/api/whatsapp/connections', token);
     setConnections(response.connections);
-    setBridgeConfigured(response.bridgeConfigured);
   }, [token]);
 
   useEffect(() => {
@@ -165,28 +228,34 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
   });
 
   const handleCreate = async () => {
-    if (!name.trim() || !phoneNumber.trim()) return;
+    if (!name.trim()) return;
     setError('');
+    setIsCreating(true);
     try {
-      const response = await apiPost<{ connection: WhatsAppConnection; bridgeConfigured: boolean }>('/api/whatsapp/connections', token, {
-        name,
-        phoneNumber
-      });
+      const response = await apiPost<{ connection: WhatsAppConnection }>('/api/whatsapp/connections', token, { name });
       setConnections((prev) => [response.connection, ...prev]);
-      setBridgeConfigured(response.bridgeConfigured);
-      setName('Recepcao WhatsApp');
-      setPhoneNumber('+5548988003260');
+      const newId = response.connection.id;
+      const connectResponse = await apiPost<{ connection: WhatsAppConnection }>(`/api/whatsapp/connections/${newId}/connect`, token);
+      setConnections((prev) => prev.map((item) => item.id === connectResponse.connection.id ? connectResponse.connection : item));
+      setName('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conexao.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
-  const runConnectionAction = async (connectionId: string, action: 'connect' | 'disconnect' | 'sync') => {
+  const runConnectionAction = async (connectionId: string, action: 'connect' | 'disconnect' | 'sync' | 'delete') => {
     setBusyId(connectionId);
     setError('');
     try {
-      const response = await apiPost<{ connection: WhatsAppConnection }>(`/api/whatsapp/connections/${connectionId}/${action}`, token);
-      setConnections((prev) => prev.map((item) => item.id === response.connection.id ? response.connection : item));
+      if (action === 'delete') {
+        await apiDelete(`/api/whatsapp/connections/${connectionId}`, token);
+        setConnections((prev) => prev.filter((item) => item.id !== connectionId));
+      } else {
+        const response = await apiPost<{ connection: WhatsAppConnection }>(`/api/whatsapp/connections/${connectionId}/${action}`, token);
+        setConnections((prev) => prev.map((item) => item.id === response.connection.id ? response.connection : item));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao executar acao.');
       loadConnections().catch(() => undefined);
@@ -207,15 +276,9 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900">Conexoes WhatsApp</h2>
-                  <p className="text-xs font-semibold text-slate-500">Whatsmeow API nao oficial com pareamento por QR e WebSocket.</p>
+                  <p className="text-xs font-semibold text-slate-500">Pareamento via whatsmeow — crie e escaneie o QR Code.</p>
                 </div>
               </div>
-
-              {!bridgeConfigured && (
-                <div className="mb-4 border border-amber-200 bg-amber-50 text-amber-800 rounded-lg px-4 py-3 text-xs font-semibold">
-                  Configure `WHATSMEOW_API_URL` no ambiente do Docker/Portainer para parear dispositivos reais pelo bridge Whatsmeow.
-                </div>
-              )}
 
               {error && (
                 <div className="mb-4 border border-rose-200 bg-rose-50 text-rose-700 rounded-lg px-4 py-3 text-xs font-bold">
@@ -223,25 +286,20 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   className="h-11 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
-                  placeholder="Nome da conexao"
-                />
-                <input
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.target.value)}
-                  className="h-11 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
-                  placeholder="+5548988003260"
+                  placeholder="Nome da instancia"
                 />
                 <button
                   onClick={handleCreate}
-                  className="h-11 px-4 bg-emerald-600 text-white rounded-lg font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-700"
+                  disabled={isCreating || !name.trim()}
+                  className="h-11 px-4 bg-emerald-600 text-white rounded-lg font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  <Plus size={16} />
-                  Criar
+                  {isCreating ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={16} />}
+                  {isCreating ? 'Conectando...' : 'Criar e Conectar'}
                 </button>
               </div>
             </div>
@@ -263,7 +321,7 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
                       <h3 className="font-black text-slate-900 truncate">{connection.name}</h3>
                       <ConnectionBadge status={connection.status} />
                     </div>
-                    <p className="text-xs font-bold text-slate-500">{connection.phoneNumber}</p>
+                    <p className="text-xs font-bold text-slate-500">{connection.phoneNumber || 'Aguardando conexao...'}</p>
                     <p className="text-[11px] text-slate-400 font-semibold mt-1">Ultima sync: {formatDateTime(connection.lastSyncAt)}</p>
                   </div>
                 </div>
@@ -275,43 +333,85 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
                 )}
 
                 {connection.qrCode && (
-                  <div className="mt-4 border border-blue-100 bg-blue-50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase tracking-widest mb-3">
+                  <div className="mt-4 border border-blue-100 bg-blue-50 rounded-lg p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 text-blue-700 font-black text-xs uppercase tracking-widest mb-3">
                       <QrCode size={15} />
-                      QR Code
+                      Escaneie o QR Code com o WhatsApp
                     </div>
                     {connection.qrCode.startsWith('data:image') ? (
-                      <img src={connection.qrCode} alt="QR WhatsApp" className="w-48 h-48 bg-white border border-blue-100 rounded-lg object-contain" />
+                      <img src={connection.qrCode} alt="QR WhatsApp" className="w-52 h-52 mx-auto bg-white border border-blue-100 rounded-xl object-contain" />
                     ) : (
                       <pre className="bg-white border border-blue-100 rounded-lg p-3 text-[11px] text-blue-900 whitespace-pre-wrap break-all">{connection.qrCode}</pre>
                     )}
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-2 mt-5">
+                {connection.status === 'connected' || connection.status === 'connecting' || connection.status === 'qr' ? (
+                  <div className="flex gap-2 mt-5">
+                    <button
+                      disabled={busyId === connection.id}
+                      onClick={() => runConnectionAction(connection.id, 'sync')}
+                      className="flex-1 h-10 bg-slate-100 text-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-200"
+                    >
+                      <RefreshCw size={15} className={busyId === connection.id ? 'animate-spin' : ''} />
+                      Sync
+                    </button>
+                    <button
+                      disabled={busyId === connection.id}
+                      onClick={() => runConnectionAction(connection.id, 'disconnect')}
+                      className="flex-1 h-10 bg-rose-50 text-rose-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-rose-100"
+                    >
+                      <Unplug size={15} />
+                      Desconectar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 mt-5">
+                    <button
+                      disabled={busyId === connection.id}
+                      onClick={() => runConnectionAction(connection.id, 'connect')}
+                      className="flex-1 h-10 bg-blue-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-blue-700"
+                    >
+                      <Wifi size={15} />
+                      Conectar
+                    </button>
+                    <button
+                      disabled={busyId === connection.id}
+                      onClick={() => runConnectionAction(connection.id, 'sync')}
+                      className="flex-1 h-10 bg-slate-100 text-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-200"
+                    >
+                      <RefreshCw size={15} className={busyId === connection.id ? 'animate-spin' : ''} />
+                      Sync
+                    </button>
+                    <button
+                      disabled={busyId === connection.id}
+                      onClick={() => runConnectionAction(connection.id, 'disconnect')}
+                      className="flex-1 h-10 bg-rose-50 text-rose-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-rose-100"
+                    >
+                      <Unplug size={15} />
+                      Sair
+                    </button>
+                  </div>
+                )}
+
+                {busyId === connection.id && (
+                  <div className="mt-3 text-xs font-bold text-slate-500 text-center">
+                    {isCreating ? 'Conectando...' : 'Processando...'}
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <button
                     disabled={busyId === connection.id}
-                    onClick={() => runConnectionAction(connection.id, 'connect')}
-                    className="h-10 bg-blue-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-blue-700"
+                    onClick={() => {
+                      if (window.confirm(`Remover conexão "${connection.name}"?`)) {
+                        runConnectionAction(connection.id, 'delete');
+                      }
+                    }}
+                    className="h-8 px-3 bg-white text-rose-500 border border-rose-200 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 hover:bg-rose-50 disabled:opacity-50"
                   >
-                    <Wifi size={15} />
-                    Conectar
-                  </button>
-                  <button
-                    disabled={busyId === connection.id}
-                    onClick={() => runConnectionAction(connection.id, 'sync')}
-                    className="h-10 bg-slate-100 text-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-200"
-                  >
-                    <RefreshCw size={15} className={busyId === connection.id ? 'animate-spin' : ''} />
-                    Sync
-                  </button>
-                  <button
-                    disabled={busyId === connection.id}
-                    onClick={() => runConnectionAction(connection.id, 'disconnect')}
-                    className="h-10 bg-rose-50 text-rose-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-rose-100"
-                  >
-                    <Unplug size={15} />
-                    Sair
+                    <Trash2 size={13} />
+                    Remover
                   </button>
                 </div>
               </div>
@@ -319,7 +419,7 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
 
             {connections.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-sm font-bold text-slate-500 xl:col-span-2">
-                Nenhuma conexao cadastrada.
+                Nenhuma conexao cadastrada. Crie uma instancia com o nome desejado e escaneie o QR Code.
               </div>
             )}
           </div>
@@ -541,15 +641,7 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                           ? 'bg-emerald-600 text-white border-emerald-600'
                           : 'bg-white text-slate-800 border-slate-200'
                       }`}>
-                        {message.mediaUrl && message.type === 'image' && (
-                          <img src={message.mediaUrl} alt="Imagem da mensagem" className="mb-3 max-h-72 rounded-lg object-cover border border-white/30" />
-                        )}
-                        {message.type === 'image' && !message.mediaUrl && (
-                          <div className="mb-2 flex items-center gap-2 text-xs font-bold opacity-80">
-                            <Image size={14} />
-                            Imagem recebida
-                          </div>
-                        )}
+                        <MediaAttachment message={message} />
                         {message.body}
                       </div>
                       <span className="text-[10px] font-semibold text-slate-400 px-1">

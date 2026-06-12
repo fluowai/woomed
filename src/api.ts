@@ -1,4 +1,6 @@
 import {
+  AccountsPayable,
+  AgentTemplate,
   AppUser,
   Appointment,
   AuditEvent,
@@ -6,14 +8,23 @@ import {
   FinanceTransaction,
   HelpTicket,
   InventoryItem,
+  LlmProviderConfig,
   MarketingCampaign,
   MedicalRecord,
+  MedicalTemplate,
+  NeuralKnowledgeItem,
   Patient,
+  PatientDocument,
+  PaymentGatewayConfig,
   ReferenceMaterial,
   ReferralRecord,
+  SaaSPlan,
+  ScheduleBlock,
   ServiceAgent,
   ServicePrice,
-  TissGuide
+  Tenant,
+  TissGuide,
+  WaitingListEntry
 } from './types';
 
 export interface BootstrapState {
@@ -32,6 +43,17 @@ export interface BootstrapState {
   referrals: ReferralRecord[];
   references: ReferenceMaterial[];
   helpTickets: HelpTicket[];
+  llmProviderConfigs: LlmProviderConfig[];
+  agentTemplates: AgentTemplate[];
+  neuralKnowledge: NeuralKnowledgeItem[];
+  patientDocuments: PatientDocument[];
+  waitingList: WaitingListEntry[];
+  scheduleBlocks: ScheduleBlock[];
+  medicalTemplates: MedicalTemplate[];
+  accountsPayable: AccountsPayable[];
+  paymentGatewayConfig: PaymentGatewayConfig[];
+  tenants?: Tenant[];
+  plans?: SaaSPlan[];
 }
 
 async function request<T>(path: string, token: string | null, init: RequestInit = {}): Promise<T> {

@@ -60,7 +60,7 @@ export default function Dashboard({
   return (
     <div className="p-4 md:p-8 h-full overflow-y-auto bg-slate-50">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 rounded-[32px] p-6 md:p-8 text-white shadow-xl shadow-blue-100 mb-8 relative overflow-hidden group">
+      <div className="bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400 rounded-[32px] p-6 md:p-8 text-white shadow-xl shadow-teal-100 mb-8 relative overflow-hidden group">
         <div className="absolute right-0 bottom-0 opacity-10 translate-x-10 translate-y-10 group-hover:scale-110 transition-transform duration-700">
           <Calendar size={300} />
         </div>
@@ -309,15 +309,15 @@ export default function Dashboard({
           </div>
 
           {/* AI Helper Quick Tip Box */}
-          <div className="bg-indigo-900 rounded-[32px] p-6 text-white shadow-lg overflow-hidden relative">
-            <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-4 translate-y-4">
-              <Sparkles size={120} />
+          <div className="bg-teal-50 border border-teal-100 rounded-[32px] p-6 text-teal-900 shadow-sm overflow-hidden relative">
+            <div className="absolute right-0 bottom-0 opacity-5 pointer-events-none translate-x-4 translate-y-4">
+              <Sparkles size={120} className="text-teal-500" />
             </div>
-            <h4 className="text-xs font-black text-indigo-300 uppercase tracking-widest mb-2 flex items-center gap-2">
+            <h4 className="text-xs font-black text-teal-600 uppercase tracking-widest mb-2 flex items-center gap-2">
               <Sparkles size={14} className="animate-spin duration-10000" />
               Dica do Assistente IA
             </h4>
-            <p className="text-xs text-indigo-100 leading-relaxed font-medium">
+            <p className="text-xs text-teal-800 leading-relaxed font-medium">
               "Você sabia que pode pedir para o Assistente IA analisar a agenda do Dr. Matheus ou Dra. Ana Paula em tempo real para encontrar horários alternativos para pacientes? Basta clicar em Assistente IA na barra lateral!"
             </p>
           </div>

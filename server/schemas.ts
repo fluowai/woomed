@@ -40,7 +40,8 @@ export const agentSchema = z.object({
   escalationTo: z.string().optional(),
   workingHours: z.string().optional(),
   rules: z.array(z.string()).optional(),
-  knowledgeBase: z.array(z.string()).optional()
+  knowledgeBase: z.array(z.string()).optional(),
+  connectionId: z.string().optional()
 });
 
 export const campaignSchema = z.object({
@@ -93,6 +94,7 @@ export const accountsPayableSchema = z.object({
 export const paymentGatewaySchema = z.object({
   provider: z.enum(["mercadopago", "stripe", "pix"]),
   apiKey: z.string().min(1, "Chave da API é obrigatória"),
+  secretKey: z.string().optional(),  // Para Stripe e outros que precisam
   webhookSecret: z.string().optional().default(""),
   pixKey: z.string().optional().default("")
 });

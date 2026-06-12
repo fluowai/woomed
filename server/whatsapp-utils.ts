@@ -24,6 +24,13 @@ export function normalizeWhatsAppNumber(input = "") {
   return digits;
 }
 
+export function isValidWhatsAppNumber(input = "") {
+  const normalized = normalizeWhatsAppNumber(input);
+  if (!/^55\d{10,11}$/.test(normalized)) return false;
+  const areaCode = Number(normalized.slice(2, 4));
+  return areaCode >= 11 && areaCode <= 99;
+}
+
 export function formatWhatsAppPhone(input = "") {
   const normalized = normalizeWhatsAppNumber(input);
   return normalized ? `+${normalized}` : "";
@@ -35,6 +42,10 @@ export function jidToNumber(jid = "") {
 
 export function isGroupJid(jid = "") {
   return String(jid).endsWith("@g.us");
+}
+
+export function isNewsletterJid(jid = "") {
+  return String(jid).endsWith("@newsletter");
 }
 
 export function firstText(...values: unknown[]) {
@@ -86,14 +97,24 @@ export async function callWhatsmeowBridge<T>(pathName: string, init: RequestInit
 }
 
 export function inferMessageType(payload: Record<string, unknown>): WhatsAppMessageType {
-  const rawType = firstText(payload.type, payload.messageType, payload.mediaType).toLowerCase();
+  const rawType = firstText(payload.type, payload.messageType, payload.mediaType, payload.mimeType, payload.mimetype).toLowerCase();
+  const fileName = firstText(payload.fileName, payload.filename, payload.documentName, payload.name).toLowerCase();
   if (rawType.includes("image")) return "image";
   if (rawType.includes("audio")) return "audio";
   if (rawType.includes("video")) return "video";
-  if (rawType.includes("document")) return "document";
+  if (rawType.includes("document") || rawType.includes("pdf") || rawType.includes("msword") || rawType.includes("officedocument")) return "document";
   if (rawType.includes("text") || rawType.includes("conversation")) return "text";
-  if (firstText(payload.imageUrl, payload.mediaUrl)) return "image";
+  if (fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx")) return "document";
+  if (firstText(payload.imageUrl, payload.mediaUrl, payload.url)) return "image";
   return "text";
+}
+
+function numberValue(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return undefined;
 }
 
 export function normalizeWhatsAppParticipant(raw: Record<string, unknown>, fallbackIndex = 0): WhatsAppParticipant {
@@ -108,7 +129,7 @@ export function normalizeWhatsAppParticipant(raw: Record<string, unknown>, fallb
     phone: number ? formatWhatsAppPhone(number) : undefined,
     name,
     pushName: pushName || undefined,
-    profileImageUrl: firstText(raw.profileImageUrl, raw.pictureUrl, raw.avatarUrl) || initialsAvatar(name)
+    profileImageUrl: firstText(raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.photoUrl) || initialsAvatar(name)
   };
 }
 
@@ -122,15 +143,15 @@ export function findOrCreateConversation(
   const conversationJid = chatJid || senderJid;
   const group = isGroupJid(conversationJid);
   const normalizedPhone = group ? "" : jidToNumber(conversationJid);
-  const pushName = firstText(raw.pushName, raw.pushname, raw.notifyName, raw.senderName, raw.name);
-  const groupName = firstText(raw.groupName, raw.subject, raw.chatName);
+  const pushName = firstText(raw.pushName, raw.pushname, raw.notifyName, raw.notify, raw.senderName, raw.name);
+  const groupName = firstText(raw.groupName, raw.groupSubject, raw.subject, raw.chatName, raw.name);
   const directTitle = pushName || (normalizedPhone ? formatWhatsAppPhone(normalizedPhone) : "Contato sem nome");
   const title = group ? groupName || "Grupo sem nome" : directTitle;
   const participantsPayload = Array.isArray(raw.participants) ? raw.participants : [];
   const participants = participantsPayload
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .map((item, index) => normalizeWhatsAppParticipant(item, index));
-  const profileImageUrl = firstText(raw.profileImageUrl, raw.pictureUrl, raw.avatarUrl, raw.groupPictureUrl) || initialsAvatar(title);
+  const profileImageUrl = firstText(raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.groupPictureUrl, raw.groupPhotoUrl, raw.photoUrl) || initialsAvatar(title);
   const conversationId = firstText(raw.conversationId) || `${connectionId}:${conversationJid || "unknown"}`;
   let conversation = data.whatsappConversations.find(item =>
     item.connectionId === connectionId && (item.jid === conversationJid || item.id === conversationId)
@@ -187,6 +208,17 @@ export function buildWhatsAppMessage(
   const body = firstText(raw.body, raw.text, raw.conversation, raw.caption, raw.message);
   const type = inferMessageType(raw);
   const timestamp = firstText(raw.timestamp, raw.createdAt, raw.messageTimestamp) || nowIso();
+  if (conversation.kind === "group" && !fromMe && senderJid && !conversation.participants.some(item => item.jid === senderJid)) {
+    conversation.participants.push({
+      id: senderJid,
+      jid: senderJid,
+      phone: senderNumber ? formatWhatsAppPhone(senderNumber) : undefined,
+      name: senderDisplayName,
+      pushName: pushName || undefined,
+      profileImageUrl: firstText(raw.senderProfileImageUrl, raw.senderPictureUrl, raw.senderPhotoUrl) || initialsAvatar(senderDisplayName)
+    });
+    conversation.participantCount = Math.max(conversation.participantCount || 0, conversation.participants.length);
+  }
 
   return {
     id: firstText(raw.id) || `wa-msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -200,7 +232,12 @@ export function buildWhatsAppMessage(
     senderDisplayName,
     body,
     type,
-    mediaUrl: firstText(raw.mediaUrl, raw.imageUrl, raw.url) || undefined,
+    mediaUrl: firstText(raw.mediaUrl, raw.imageUrl, raw.audioUrl, raw.videoUrl, raw.documentUrl, raw.fileUrl, raw.url) || undefined,
+    mediaMimeType: firstText(raw.mediaMimeType, raw.mimeType, raw.mimetype) || undefined,
+    mediaFileName: firstText(raw.mediaFileName, raw.fileName, raw.filename, raw.documentName) || undefined,
+    mediaSize: numberValue(raw.mediaSize, raw.fileSize, raw.size),
+    mediaDurationSeconds: numberValue(raw.mediaDurationSeconds, raw.durationSeconds, raw.seconds),
+    thumbnailUrl: firstText(raw.thumbnailUrl, raw.jpegThumbnailUrl, raw.previewUrl) || undefined,
     timestamp,
     status: fromMe ? "sent" : "received"
   };

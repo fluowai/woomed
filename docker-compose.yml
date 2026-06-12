@@ -1,36 +1,141 @@
 services:
-  consultio-med:
+  postgres:
+    image: postgres:16-alpine
+    container_name: consultio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: consultio
+      POSTGRES_USER: consultio
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD obrigatorio}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      - consultio-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consultio -d consultio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  whatsmeow-bridge:
     build:
-      context: .
+      context: ./whatsmeow-bridge
       dockerfile: Dockerfile
-    image: consultio-med:latest
+    container_name: consultio-whatsmeow
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      WHATSMEOW_DATA_DIR: /app/data
+      APP_WEBHOOK_URL: http://consultio-med:5173/api/whatsapp/webhook
+      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
+      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
+    volumes:
+      - whatsmeow_data:/app/data
+    networks:
+      - consultio-net
+    depends_on:
+      consultio-med:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  consultio-med:
+    build: .
     container_name: consultio-med
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 5173
       APP_URL: ${APP_URL:-http://localhost:5173}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://consultio:${DB_PASSWORD}@postgres:5432/consultio}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET obrigatorio}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      WHATSMEOW_API_URL: ${WHATSMEOW_API_URL:-}
+      WHATSMEOW_API_URL: http://whatsmeow-bridge:8080
       WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:-}
+      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET}
+      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
       VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
-      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
-    ports:
-      - "${APP_PORT:-5173}:5173"
+      CORS_ORIGIN: ${CORS_ORIGIN:-true}
     volumes:
       - consultio_med_data:/app/data
+      - consultio_uploads:/app/uploads
+    networks:
+      - consultio-net
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/auth/users').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: consultio-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:5173}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - consultio-net
+    depends_on:
+      consultio-med:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  consultio-net:
+    driver: bridge
+    name: consultio-network
 
 volumes:
+  postgres_data:
+    name: consultio_postgres_data
   consultio_med_data:
+    name: consultio_med_data
+  consultio_uploads:
+    name: consultio_uploads
+  whatsmeow_data:
+    name: consultio_whatsmeow_data
+  caddy_data:
+    name: consultio_caddy_data
+  caddy_config:
+    name: consultio_caddy_config

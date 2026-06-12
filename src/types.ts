@@ -21,7 +21,7 @@ export interface Appointment {
   paymentStatus: 'paid' | 'pending' | 'free';
 }
 
-export type UserRole = 'admin' | 'doctor' | 'reception' | 'finance';
+export type UserRole = 'super_admin' | 'admin' | 'doctor' | 'reception' | 'finance';
 
 export interface AppUser {
   id: string;
@@ -193,7 +193,55 @@ export interface ServiceAgent {
   workingHours: string;
   rules: string[];
   knowledgeBase: string[];
+  connectionId?: string;
   createdAt: string;
+}
+
+export type LlmProvider = 'openai' | 'gemini' | 'anthropic' | 'groq' | 'local';
+
+export interface LlmProviderConfig {
+  id: string;
+  name: string;
+  provider: LlmProvider;
+  model: string;
+  apiKeyMasked?: string;
+  endpoint?: string;
+  temperature: number;
+  maxTokens: number;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  segment: 'saude' | 'beleza' | 'saude_e_beleza';
+  channel: ChannelType;
+  objective: string;
+  tone: string;
+  escalationTo: string;
+  workingHours: string;
+  rules: string[];
+  knowledgeBase: string[];
+  autonomousActions: string[];
+}
+
+export type NeuralKnowledgeStatus = 'draft' | 'indexed' | 'archived';
+
+export interface NeuralKnowledgeItem {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  sourceType: 'manual' | 'url' | 'file';
+  sourceUrl?: string;
+  targetAgentIds: string[];
+  tags: string[];
+  status: NeuralKnowledgeStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MarketingCampaign {
@@ -320,6 +368,11 @@ export interface WhatsAppMessage {
   body: string;
   type: WhatsAppMessageType;
   mediaUrl?: string;
+  mediaMimeType?: string;
+  mediaFileName?: string;
+  mediaSize?: number;
+  mediaDurationSeconds?: number;
+  thumbnailUrl?: string;
   timestamp: string;
   status?: 'sent' | 'delivered' | 'read' | 'received';
 }
@@ -457,6 +510,7 @@ export interface PaymentGatewayConfig {
   provider: 'mercadopago' | 'stripe' | 'pix';
   enabled: boolean;
   apiKey: string;
+  secretKey?: string;  // Para providers como Stripe que usam secret key
   webhookSecret: string;
   pixKey?: string;
 }

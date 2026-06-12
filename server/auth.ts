@@ -3,7 +3,21 @@ import jwt from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import { AppUser } from "../src/types";
 
-const JWT_SECRET = process.env.JWT_SECRET || "consultio-dev-secret-change-in-production";
+import crypto from "crypto";
+
+// JWT_SECRET é OBRIGATÓRIO em produção
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "ERRO CRÍTICO: JWT_SECRET não configurado em produção. " +
+      "Configure a variável de ambiente JWT_SECRET com uma string segura (32+ caracteres aleatórios). " +
+      "Exemplo: JWT_SECRET=$(openssl rand -hex 32)"
+    );
+  }
+  return secret || crypto.randomBytes(32).toString("hex");
+})();
+
 const JWT_EXPIRES_IN = "24h";
 const REFRESH_EXPIRES_IN = "7d";
 

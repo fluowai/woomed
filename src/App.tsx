@@ -12,36 +12,28 @@ import ChatAssistant from './components/ChatAssistant';
 import Dashboard from './components/Dashboard';
 import Financeiro from './components/Financeiro';
 import Login from './components/Login';
+import SaaSAdmin from './components/SaaSAdmin';
 import { WhatsAppConnections, WhatsAppInbox } from './components/WhatsApp';
 import {
   AgentsHub,
   HelpModule,
   InteractiveConsultation,
   InventoryModule,
+  LlmSettingsModule,
   MarketingModule,
+  NeuralModule,
   ReferencesModule,
   ReferralsModule,
   ReportsModule,
   TissModule
 } from './components/ExpansionModules';
+import { AgentPipelineDashboard, SdrPipeline, AgentConversations, AgentMetricsView } from './components/AgentModules';
 import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, BootstrapState } from './api';
 import { ToastProvider, ToastListener, showToast } from './components/Toast';
-import { 
-  MOCK_PATIENTS, 
-  MOCK_DOCTORS, 
-  MOCK_APPOINTMENTS, 
-  MOCK_MEDICAL_RECORDS, 
-  DEFAULT_SERVICE_PRICES,
-  MOCK_FINANCE_TRANSACTIONS,
-  MOCK_HELP_TICKETS,
-  MOCK_INVENTORY_ITEMS,
-  MOCK_MARKETING_CAMPAIGNS,
-  MOCK_REFERENCES,
-  MOCK_REFERRALS,
-  MOCK_SERVICE_AGENTS,
-  MOCK_TISS_GUIDES,
+import {
+  AccountsPayable,
   AppUser,
   Patient, 
   Appointment, 
@@ -58,8 +50,19 @@ import {
   InventoryItem,
   ReferralRecord,
   ReferenceMaterial,
-  HelpTicket
+  HelpTicket,
+  LlmProviderConfig,
+  AgentTemplate,
+  MedicalTemplate,
+  NeuralKnowledgeItem,
+  PatientDocument,
+  PaymentGatewayConfig,
+  ScheduleBlock,
+  WaitingListEntry,
+  Tenant,
+  SaaSPlan
 } from './types';
+import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_KNOWLEDGE } from './aiCatalog';
 
 export type ViewType = string;
 
@@ -75,20 +78,31 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Dynamic States for 100% Functional CRUD
-  const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
-  const [doctors, setDoctors] = useState<Doctor[]>(MOCK_DOCTORS);
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
-  const [medicalRecords, setMedicalRecords] = useState<Record<string, MedicalRecord>>(MOCK_MEDICAL_RECORDS);
-  const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>(MOCK_FINANCE_TRANSACTIONS);
-  const [servicePrices, setServicePrices] = useState<ServicePrice[]>(DEFAULT_SERVICE_PRICES);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [medicalRecords, setMedicalRecords] = useState<Record<string, MedicalRecord>>({});
+  const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
+  const [servicePrices, setServicePrices] = useState<ServicePrice[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [serviceAgents, setServiceAgents] = useState<ServiceAgent[]>(MOCK_SERVICE_AGENTS);
-  const [marketingCampaigns, setMarketingCampaigns] = useState<MarketingCampaign[]>(MOCK_MARKETING_CAMPAIGNS);
-  const [tissGuides, setTissGuides] = useState<TissGuide[]>(MOCK_TISS_GUIDES);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(MOCK_INVENTORY_ITEMS);
-  const [referrals, setReferrals] = useState<ReferralRecord[]>(MOCK_REFERRALS);
-  const [references, setReferences] = useState<ReferenceMaterial[]>(MOCK_REFERENCES);
-  const [helpTickets, setHelpTickets] = useState<HelpTicket[]>(MOCK_HELP_TICKETS);
+  const [serviceAgents, setServiceAgents] = useState<ServiceAgent[]>([]);
+  const [marketingCampaigns, setMarketingCampaigns] = useState<MarketingCampaign[]>([]);
+  const [tissGuides, setTissGuides] = useState<TissGuide[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+  const [references, setReferences] = useState<ReferenceMaterial[]>([]);
+  const [helpTickets, setHelpTickets] = useState<HelpTicket[]>([]);
+  const [llmProviderConfigs, setLlmProviderConfigs] = useState<LlmProviderConfig[]>([]);
+  const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
+  const [neuralKnowledge, setNeuralKnowledge] = useState<NeuralKnowledgeItem[]>([]);
+  const [patientDocuments, setPatientDocuments] = useState<PatientDocument[]>([]);
+  const [waitingList, setWaitingList] = useState<WaitingListEntry[]>([]);
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
+  const [medicalTemplates, setMedicalTemplates] = useState<MedicalTemplate[]>([]);
+  const [accountsPayable, setAccountsPayable] = useState<AccountsPayable[]>([]);
+  const [paymentGatewayConfig, setPaymentGatewayConfig] = useState<PaymentGatewayConfig[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [currentDate, setCurrentDate] = useState<string>(() => todayDate());
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
   const [agendaSearch, setAgendaSearch] = useState<string>('');
@@ -123,6 +137,17 @@ export default function App() {
     setReferrals(state.referrals);
     setReferences(state.references);
     setHelpTickets(state.helpTickets);
+    setLlmProviderConfigs(state.llmProviderConfigs || DEFAULT_LLM_PROVIDER_CONFIGS);
+    setAgentTemplates(state.agentTemplates || DEFAULT_AGENT_TEMPLATES);
+    setNeuralKnowledge(state.neuralKnowledge || DEFAULT_NEURAL_KNOWLEDGE);
+    setPatientDocuments(state.patientDocuments || []);
+    setWaitingList(state.waitingList || []);
+    setScheduleBlocks(state.scheduleBlocks || []);
+    setMedicalTemplates(state.medicalTemplates || []);
+    setAccountsPayable(state.accountsPayable || []);
+    setPaymentGatewayConfig(state.paymentGatewayConfig || []);
+    setTenants(state.tenants || []);
+    setPlans(state.plans || []);
   };
 
   useEffect(() => {
@@ -400,6 +425,57 @@ export default function App() {
     }
   };
 
+  const handleCreateAgentFromTemplate = async (templateId: string) => {
+    try {
+      const response = await apiPost<{ agent: ServiceAgent }>(`/api/agent-templates/${templateId}/use`, authToken);
+      setServiceAgents(prev => [response.agent, ...prev]);
+      showToast('success', `Agente ${response.agent.name} criado a partir do modelo.`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao criar agente por modelo.');
+    }
+  };
+
+  const handleCreateLlm = async (config: Omit<LlmProviderConfig, 'id' | 'createdAt' | 'updatedAt' | 'apiKeyMasked' | 'isActive'> & { apiKey?: string }) => {
+    try {
+      const response = await apiPost<{ llm: LlmProviderConfig }>('/api/llms', authToken, config);
+      setLlmProviderConfigs(prev => [response.llm, ...prev.map(item => response.llm.isDefault ? { ...item, isDefault: false } : item)]);
+      showToast('success', 'LLM cadastrada com sucesso.');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao cadastrar LLM.');
+    }
+  };
+
+  const handleUpdateLlm = async (id: string, patch: Partial<LlmProviderConfig> & { apiKey?: string }) => {
+    try {
+      const response = await apiPatch<{ llm: LlmProviderConfig }>(`/api/llms/${id}`, authToken, patch);
+      setLlmProviderConfigs(prev => prev.map(item => {
+        const next = response.llm.isDefault ? { ...item, isDefault: false } : item;
+        return next.id === response.llm.id ? response.llm : next;
+      }));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar LLM.');
+    }
+  };
+
+  const handleCreateKnowledge = async (item: Omit<NeuralKnowledgeItem, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => {
+    try {
+      const response = await apiPost<{ item: NeuralKnowledgeItem }>('/api/neural/knowledge', authToken, item);
+      setNeuralKnowledge(prev => [response.item, ...prev]);
+      showToast('success', 'Conhecimento indexado na Neural.');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao indexar conhecimento.');
+    }
+  };
+
+  const handleUpdateKnowledge = async (id: string, patch: Partial<NeuralKnowledgeItem>) => {
+    try {
+      const response = await apiPatch<{ item: NeuralKnowledgeItem }>(`/api/neural/knowledge/${id}`, authToken, patch);
+      setNeuralKnowledge(prev => prev.map(item => item.id === id ? response.item : item));
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar conhecimento.');
+    }
+  };
+
   const handleCreateCampaign = async (campaign: Omit<MarketingCampaign, 'id' | 'status' | 'leads'>) => {
     try {
       const response = await apiPost<{ campaign: MarketingCampaign }>('/api/marketing/campaigns', authToken, campaign);
@@ -548,6 +624,21 @@ export default function App() {
             }}
           />
         );
+      case 'Painel SaaS':
+        return (
+          <SaaSAdmin
+            token={authToken}
+            tenants={tenants}
+            plans={plans}
+            onRefresh={async () => {
+              try {
+                const state = await apiGet<BootstrapState>('/api/bootstrap', authToken);
+                if (state.tenants) setTenants(state.tenants);
+                if (state.plans) setPlans(state.plans);
+              } catch {}
+            }}
+          />
+        );
       case 'Agenda':
         return (
           <>
@@ -608,13 +699,40 @@ export default function App() {
       case 'Conexoes':
         return <WhatsAppConnections token={authToken} />;
       case 'Assistente IA':
-        return <ChatAssistant token={authToken} doctors={doctors} appointments={appointments} patients={patients} />;
+        return <ChatAssistant token={authToken} doctors={doctors} appointments={appointments} patients={patients} llmConfigs={llmProviderConfigs} />;
       case 'Central de Agentes':
         return (
           <AgentsHub
             agents={serviceAgents}
+            templates={agentTemplates}
             onCreateAgent={handleCreateAgent}
             onUpdateAgent={handleUpdateAgent}
+            onCreateFromTemplate={handleCreateAgentFromTemplate}
+          />
+        );
+      case 'Pipeline Agentes':
+        return <AgentPipelineDashboard />;
+      case 'Pipeline SDR':
+        return <SdrPipeline />;
+      case 'Conversas Agentes':
+        return <AgentConversations />;
+      case 'Métricas Agentes':
+        return <AgentMetricsView />;
+      case 'LLMs':
+        return (
+          <LlmSettingsModule
+            configs={llmProviderConfigs}
+            onCreateLlm={handleCreateLlm}
+            onUpdateLlm={handleUpdateLlm}
+          />
+        );
+      case 'Neural':
+        return (
+          <NeuralModule
+            knowledge={neuralKnowledge}
+            agents={serviceAgents}
+            onCreateKnowledge={handleCreateKnowledge}
+            onUpdateKnowledge={handleUpdateKnowledge}
           />
         );
       case 'Consulta Interativa':
@@ -736,7 +854,7 @@ export default function App() {
         <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
           setActiveView(view);
           setIsSidebarOpen(false);
-        }} />
+        }} userRole={currentUser?.role} />
       </div>
       
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -752,7 +870,7 @@ export default function App() {
         {renderView()}
 
         {/* Floating Action Buttons */}
-        {!['Mensagens', 'Conexoes', 'Assistente IA'].includes(activeView) && (
+        {!['Mensagens', 'Conexoes', 'Assistente IA', 'Conversas Agentes'].includes(activeView) && (
           <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 flex flex-col gap-4 z-30">
             <button 
               onClick={() => setIsSchedulingOpen(true)}

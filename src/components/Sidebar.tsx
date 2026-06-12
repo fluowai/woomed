@@ -8,6 +8,7 @@ import {
   Bot,
   Calendar, 
   ClipboardList, 
+  DatabaseZap,
   DollarSign, 
   FileText, 
   HelpCircle, 
@@ -17,22 +18,35 @@ import {
   MonitorPlay, 
   Package, 
   Plus, 
+  ServerCog,
   Smartphone,
   Stethoscope, 
   MessageSquareText,
   UserPlus, 
   UsersRound,
-  Users
+  Users,
+  Activity,
+  ListTodo,
+  PieChart,
+  Building2,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ViewType } from '../App';
 
-const navItems: { icon: any, label: string, view: ViewType }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' },
-  { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' },
+function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOnly?: boolean }[] {
+  return [
+    { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' },
+    { icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS', superAdminOnly: true },
+    { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' },
   { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' },
   { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' },
+  { icon: ServerCog, label: 'LLMs', view: 'LLMs' },
   { icon: Bot, label: 'Central de Agentes', view: 'Central de Agentes' },
+  { icon: Activity, label: 'Pipeline', view: 'Pipeline Agentes' },
+  { icon: ListTodo, label: 'Pipeline SDR', view: 'Pipeline SDR' },
+  { icon: MessageSquareText, label: 'Conversas', view: 'Conversas Agentes' },
+  { icon: PieChart, label: 'Métricas', view: 'Métricas Agentes' },
+  { icon: DatabaseZap, label: 'Neural', view: 'Neural' },
   { icon: Calendar, label: 'Agenda', view: 'Agenda' },
   { icon: ClipboardList, label: 'Prontuários', view: 'Prontuários' },
   { icon: Users, label: 'Pacientes', view: 'Pacientes' },
@@ -45,15 +59,18 @@ const navItems: { icon: any, label: string, view: ViewType }[] = [
   { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' },
   { icon: Link, label: 'Referências', view: 'Referências' },
   { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' },
-];
+  ];
+}
 
 interface SidebarProps {
   activeView: ViewType;
   onViewChange: (view: ViewType) => void;
   onNewAppointment: () => void;
+  userRole?: string;
 }
 
-export default function Sidebar({ activeView, onViewChange, onNewAppointment }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole }: SidebarProps) {
+  const navItems = allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
   return (
     <aside id="sidebar" className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
       <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange('Dashboard')}>
