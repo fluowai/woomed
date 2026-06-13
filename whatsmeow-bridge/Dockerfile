@@ -2,6 +2,7 @@ FROM golang:1.23-alpine AS build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
+ENV GOPROXY=https://proxy.golang.org,direct
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/whatsmeow-bridge .
