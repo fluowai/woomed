@@ -1,0 +1,82 @@
+import path from "path";
+import fs from "fs/promises";
+import { dataDir, dataFile, loadData } from "./data";
+
+const BACKUP_DIR = path.join(process.cwd(), "backups");
+const MAX_BACKUPS = 30;
+
+function formatDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
+}
+
+export async function createBackup(): Promise<string> {
+  await fs.mkdir(BACKUP_DIR, { recursive: true });
+  const data = await loadData();
+  const backupName = `consultio-backup-${formatDate(new Date())}.json`;
+  const backupPath = path.join(BACKUP_DIR, backupName);
+  await fs.writeFile(backupPath, JSON.stringify(data, null, 2), "utf-8");
+  await cleanOldBackups();
+  return backupPath;
+}
+
+async function cleanOldBackups(): Promise<void> {
+  try {
+    const files = await fs.readdir(BACKUP_DIR);
+    const backupFiles = files.filter(f => f.startsWith("consultio-backup-")).sort().reverse();
+    if (backupFiles.length > MAX_BACKUPS) {
+      for (let i = MAX_BACKUPS; i < backupFiles.length; i++) {
+        await fs.unlink(path.join(BACKUP_DIR, backupFiles[i])).catch(() => {});
+      }
+    }
+  } catch {
+    // Directory may not exist yet
+  }
+}
+
+export async function listBackups(): Promise<{ name: string; size: number; date: string }[]> {
+  try {
+    const files = await fs.readdir(BACKUP_DIR);
+    const backupFiles = files.filter(f => f.startsWith("consultio-backup-")).sort().reverse();
+    const result = [];
+    for (const file of backupFiles) {
+      const stat = await fs.stat(path.join(BACKUP_DIR, file));
+      result.push({ name: file, size: stat.size, date: stat.mtime.toISOString() });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+export async function restoreBackup(backupName: string): Promise<boolean> {
+  try {
+    const backupPath = path.join(BACKUP_DIR, backupName);
+    const raw = await fs.readFile(backupPath, "utf-8");
+    JSON.parse(raw); // Validate JSON
+    await fs.copyFile(backupPath, dataFile);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function scheduleAutoBackup(): Promise<void> {
+  const BACKUP_INTERVAL = Number(process.env.BACKUP_INTERVAL_MINUTES || 60) * 60 * 1000;
+
+  const runBackup = async () => {
+    try {
+      await createBackup();
+      console.log(`[Backup] Auto backup created at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error("[Backup] Auto backup failed:", error);
+    }
+  };
+
+  await runBackup(); // Run immediately on startup
+  setInterval(runBackup, BACKUP_INTERVAL);
+}

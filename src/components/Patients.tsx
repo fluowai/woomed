@@ -4,13 +4,44 @@
  */
 
 import { Search, UserPlus, FileText, Edit2, Phone, Mail, Calendar, CreditCard, MapPin, Upload, Camera, Image as ImageIcon, X } from 'lucide-react';
-import { MOCK_PATIENTS, Patient } from '../types';
-import { useState, useRef, ChangeEvent } from 'react';
+import { Patient } from '../types';
+import React, { useState, useRef, ChangeEvent } from 'react';
 
-export default function Patients() {
+interface PatientsProps {
+  patients: Patient[];
+  onAddPatient: (newPatient: Patient) => void;
+  onEditPatient: (editedPatient: Patient) => void;
+  onViewMedicalRecord: (patientId: string) => void;
+  onScheduleForPatient: (patientName: string) => void;
+}
+
+export default function Patients({ 
+  patients, 
+  onAddPatient, 
+  onEditPatient, 
+  onViewMedicalRecord,
+  onScheduleForPatient
+}: PatientsProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+  
+  // Modal states for CRUD
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<Patient | null>(null);
+
+  // Form fields
+  const [fullName, setFullName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('SP');
+  const [zip, setZip] = useState('');
+  const [lgpdConsent, setLgpdConsent] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const filteredPatients = patients.filter(p => 
@@ -28,13 +59,91 @@ export default function Patients() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        setPatients(prev => prev.map(p => 
-          p.id === editingPatientId ? { ...p, avatarUrl: result } : p
-        ));
+        const target = patients.find(p => p.id === editingPatientId);
+        if (target) {
+          onEditPatient({ ...target, avatarUrl: result });
+        }
         setEditingPatientId(null);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const openCreateModal = () => {
+    setFullName('');
+    setBirthDate('');
+    setCpf('');
+    setPhone('');
+    setEmail('');
+    setStreet('');
+    setCity('');
+    setState('SP');
+    setZip('');
+    setLgpdConsent(false);
+    setIsCreateOpen(true);
+  };
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName || !cpf || !birthDate || !lgpdConsent) return;
+
+    const newPatient: Patient = {
+      id: 'p-' + Date.now().toString(),
+      fullName,
+      birthDate,
+      cpf,
+      phone,
+      email,
+      address: {
+        street: street || 'Não informado',
+        city: city || 'Não informado',
+        state: state || 'SP',
+        zip: zip || 'Não informado'
+      },
+      lgpdConsent,
+      lgpdConsentAt: new Date().toISOString()
+    };
+
+    onAddPatient(newPatient);
+    setIsCreateOpen(false);
+  };
+
+  const openEditModal = (patient: Patient) => {
+    setSelectedPatientForEdit(patient);
+    setFullName(patient.fullName);
+    setBirthDate(patient.birthDate);
+    setCpf(patient.cpf);
+    setPhone(patient.phone);
+    setEmail(patient.email);
+    setStreet(patient.address.street);
+    setCity(patient.address.city);
+    setState(patient.address.state);
+    setZip(patient.address.zip);
+    setIsEditOpen(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientForEdit || !fullName || !cpf) return;
+
+    const updatedPatient: Patient = {
+      ...selectedPatientForEdit,
+      fullName,
+      birthDate,
+      cpf,
+      phone,
+      email,
+      address: {
+        street,
+        city,
+        state,
+        zip
+      }
+    };
+
+    onEditPatient(updatedPatient);
+    setIsEditOpen(false);
+    setSelectedPatientForEdit(null);
   };
 
   return (
@@ -50,10 +159,13 @@ export default function Patients() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Gestão de Pacientes</h2>
-          <p className="text-sm text-slate-500 font-medium">Visualize e gerencie o cadastro de seus pacientes.</p>
+          <p className="text-sm text-slate-500 font-medium">Visualize, cadastre e gerencie os pacientes da clínica.</p>
         </div>
         
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95">
+        <button 
+          onClick={openCreateModal}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95"
+        >
           <UserPlus size={20} />
           <span>Cadastrar Novo Paciente</span>
         </button>
@@ -95,7 +207,8 @@ export default function Patients() {
                     <div className="flex items-center gap-4">
                       <div 
                         onClick={() => handleAvatarClick(patient.id)}
-                        className="relative w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shadow-sm border border-slate-100 cursor-pointer overflow-hidden transition-all hover:ring-2 hover:ring-blue-500 group/avatar"
+                        className="relative w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shadow-sm border border-slate-100 cursor-pointer overflow-hidden transition-all hover:ring-2 hover:ring-blue-500 group/avatar shrink-0"
+                        title="Alterar avatar do paciente"
                       >
                         {patient.avatarUrl ? (
                           <img src={patient.avatarUrl} alt={patient.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -110,7 +223,7 @@ export default function Patients() {
                         <span className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-600 transition-colors">{patient.fullName}</span>
                         <div className="flex items-center gap-1.5 text-slate-400">
                           <Calendar size={12} className="shrink-0" />
-                          <span className="text-xs font-bold">{new Date(patient.birthDate).toLocaleDateString()}</span>
+                          <span className="text-xs font-bold">{new Date(patient.birthDate + 'T00:00:00').toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>
@@ -154,10 +267,25 @@ export default function Patients() {
 
                   <td className="px-8 py-6 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Prontuário">
+                      <button 
+                        onClick={() => onScheduleForPatient(patient.fullName)}
+                        className="p-2.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all" 
+                        title="Agendar Consulta"
+                      >
+                        <Calendar size={20} />
+                      </button>
+                      <button 
+                        onClick={() => onViewMedicalRecord(patient.id)}
+                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" 
+                        title="Ver Prontuário"
+                      >
                         <FileText size={20} />
                       </button>
-                      <button className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Editar Cadastro">
+                      <button 
+                        onClick={() => openEditModal(patient)}
+                        className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" 
+                        title="Editar Cadastro"
+                      >
                         <Edit2 size={20} />
                       </button>
                     </div>
@@ -170,17 +298,344 @@ export default function Patients() {
           {filteredPatients.length === 0 && (
             <div className="p-20 flex flex-col items-center justify-center text-slate-400">
               <Search size={48} className="mb-4 opacity-20" />
-              <p className="font-bold">Nenhum paciente encontrado para sua busca.</p>
+              <p className="font-bold">Nenhum paciente cadastrado para sua busca.</p>
               <button className="mt-4 text-blue-600 font-bold hover:underline" onClick={() => setSearchTerm('')}>Limpar busca</button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Create Patient Modal */}
+      {isCreateOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <form 
+            onSubmit={handleCreateSubmit}
+            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 tracking-tight">Cadastrar Novo Paciente</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo prontuário será criado automaticamente</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsCreateOpen(false)} 
+                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all font-bold text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Full name */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome Completo *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ex: Pedro Henrique Silva"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* CPF */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    placeholder="123.456.789-00"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold font-mono"
+                  />
+                </div>
+
+                {/* Birth Date */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data de Nascimento *</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Celular / Telefone</label>
+                  <input 
+                    type="text" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail</label>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="paciente@email.com"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Address Section */}
+                <div className="md:col-span-2 border-t border-slate-100 pt-6">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4">Endereço Residencial</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex flex-col gap-2 md:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logradouro / Rua</label>
+                      <input 
+                        type="text" 
+                        value={street}
+                        onChange={(e) => setStreet(e.target.value)}
+                        placeholder="Ex: Av. Paulista, 1200 - Apto 32"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cidade</label>
+                      <input 
+                        type="text" 
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="Ex: São Paulo"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</label>
+                      <input 
+                        type="text" 
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        placeholder="SP"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CEP</label>
+                      <input 
+                        type="text" 
+                        value={zip}
+                        onChange={(e) => setZip(e.target.value)}
+                        placeholder="01310-100"
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+                <label className="mx-8 mb-4 flex items-start gap-3 p-4 rounded-2xl border border-blue-100 bg-blue-50/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={lgpdConsent}
+                    onChange={(e) => setLgpdConsent(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    required
+                  />
+                  <span className="text-xs leading-relaxed text-slate-600 font-semibold">
+                    Confirmo que o paciente autorizou o tratamento dos dados pessoais e sensiveis para atendimento, gestao clinica e cumprimento de obrigacoes legais.
+                  </span>
+                </label>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+              <button 
+                type="submit"
+                disabled={!fullName || !cpf || !birthDate || !lgpdConsent}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
+              >
+                Concluir Cadastro
+              </button>
+              <button 
+                type="button"
+                onClick={() => setIsCreateOpen(false)}
+                className="px-8 bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Patient Modal */}
+      {isEditOpen && selectedPatientForEdit && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <form 
+            onSubmit={handleEditSubmit}
+            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white">
+                  <Edit2 size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 tracking-tight">Editar Cadastro do Paciente</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modificações salvas em tempo real</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsEditOpen(false);
+                  setSelectedPatientForEdit(null);
+                }} 
+                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all font-bold text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Full name */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome Completo *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* CPF */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold font-mono"
+                  />
+                </div>
+
+                {/* Birth Date */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data de Nascimento *</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Celular / Telefone</label>
+                  <input 
+                    type="text" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail</label>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Address Section */}
+                <div className="md:col-span-2 border-t border-slate-100 pt-6">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4">Endereço Residencial</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex flex-col gap-2 md:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logradouro / Rua</label>
+                      <input 
+                        type="text" 
+                        value={street}
+                        onChange={(e) => setStreet(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cidade</label>
+                      <input 
+                        type="text" 
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</label>
+                      <input 
+                        type="text" 
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CEP</label>
+                      <input 
+                        type="text" 
+                        value={zip}
+                        onChange={(e) => setZip(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+              <button 
+                type="submit"
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-amber-100"
+              >
+                Salvar Alterações
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsEditOpen(false);
+                  setSelectedPatientForEdit(null);
+                }}
+                className="px-8 bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Avatar Upload Modal */}
       {editingPatientId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-bold text-slate-900">Atualizar Foto do Paciente</h3>
               <button 
@@ -192,7 +647,7 @@ export default function Patients() {
             </div>
             
             <div className="p-8 flex flex-col items-center gap-6">
-              <div className="w-32 h-32 rounded-3xl bg-blue-50 border-2 border-dashed border-blue-200 flex items-center justify-center overflow-hidden">
+              <div className="w-32 h-32 rounded-[24px] bg-blue-50 border-2 border-dashed border-blue-200 flex items-center justify-center overflow-hidden">
                 {patients.find(p => p.id === editingPatientId)?.avatarUrl ? (
                   <img 
                     src={patients.find(p => p.id === editingPatientId)?.avatarUrl} 

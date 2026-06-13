@@ -5,8 +5,10 @@
 
 import { 
   BarChart3, 
+  Bot,
   Calendar, 
   ClipboardList, 
+  DatabaseZap,
   DollarSign, 
   FileText, 
   HelpCircle, 
@@ -16,38 +18,59 @@ import {
   MonitorPlay, 
   Package, 
   Plus, 
+  ServerCog,
+  Smartphone,
   Stethoscope, 
   MessageSquareText,
   UserPlus, 
   UsersRound,
-  Users
+  Users,
+  Activity,
+  ListTodo,
+  PieChart,
+  Building2,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ViewType } from '../App';
 
-const navItems: { icon: any, label: string, view: ViewType }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' },
-  { icon: MessageSquareText, label: 'Assistente IA', view: 'Mensagens' },
+function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOnly?: boolean }[] {
+  return [
+    { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' },
+    { icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS', superAdminOnly: true },
+    { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' },
+  { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' },
+  { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' },
+  { icon: ServerCog, label: 'LLMs', view: 'LLMs' },
+  { icon: Bot, label: 'Central de Agentes', view: 'Central de Agentes' },
+  { icon: Activity, label: 'Pipeline', view: 'Pipeline Agentes' },
+  { icon: ListTodo, label: 'Pipeline SDR', view: 'Pipeline SDR' },
+  { icon: MessageSquareText, label: 'Conversas', view: 'Conversas Agentes' },
+  { icon: PieChart, label: 'Métricas', view: 'Métricas Agentes' },
+  { icon: DatabaseZap, label: 'Neural', view: 'Neural' },
   { icon: Calendar, label: 'Agenda', view: 'Agenda' },
   { icon: ClipboardList, label: 'Prontuários', view: 'Prontuários' },
   { icon: Users, label: 'Pacientes', view: 'Pacientes' },
-  { icon: MonitorPlay, label: 'Consulta Interativa', view: 'Dashboard' },
-  { icon: Megaphone, label: 'Marketing', view: 'Dashboard' },
+  { icon: MonitorPlay, label: 'Consulta Interativa', view: 'Consulta Interativa' },
+  { icon: Megaphone, label: 'Marketing', view: 'Marketing' },
   { icon: DollarSign, label: 'Financeiro', view: 'Financeiro' },
-  { icon: FileText, label: 'TISS', view: 'Dashboard' },
-  { icon: Package, label: 'Estoques', view: 'Dashboard' },
-  { icon: BarChart3, label: 'Relatórios', view: 'Dashboard' },
-  { icon: UsersRound, label: 'Indique e ganhe', view: 'Dashboard' },
-  { icon: Link, label: 'Referências', view: 'Dashboard' },
-  { icon: HelpCircle, label: 'Ajuda', view: 'Dashboard' },
-];
+  { icon: FileText, label: 'TISS', view: 'TISS' },
+  { icon: Package, label: 'Estoques', view: 'Estoques' },
+  { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' },
+  { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' },
+  { icon: Link, label: 'Referências', view: 'Referências' },
+  { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' },
+  ];
+}
 
 interface SidebarProps {
   activeView: ViewType;
   onViewChange: (view: ViewType) => void;
+  onNewAppointment: () => void;
+  userRole?: string;
 }
 
-export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole }: SidebarProps) {
+  const navItems = allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
   return (
     <aside id="sidebar" className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
       <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange('Dashboard')}>
@@ -58,7 +81,10 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
       </div>
 
       <div className="px-4 mb-6">
-        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95">
+        <button 
+          onClick={onNewAppointment}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95"
+        >
           <Plus size={20} />
           <span>Novo atendimento</span>
         </button>

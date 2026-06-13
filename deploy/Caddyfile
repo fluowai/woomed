@@ -1,0 +1,65 @@
+# ============================================================
+# Consultio Med - Caddy Reverse Proxy Configuration
+# ============================================================
+# VARIAVEIS:
+#   {env.APP_DOMAIN} - Dominio da aplicacao (ex: https://app.seudominio.com.br)
+#   {env.ACME_EMAIL} - Email para Let's Encrypt (ex: admin@seudominio.com.br)
+# ============================================================
+
+{
+  email {env.ACME_EMAIL}
+}
+
+{env.APP_DOMAIN} {
+  reverse_proxy consultio-med:5173 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+
+  header {
+    # Security headers
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+
+  # WebSocket support (WhatsApp real-time)
+  @websockets {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+  reverse_proxy @websockets consultio-med:5173
+
+  # Health check endpoint (no cache)
+  @health {
+    path /api/health
+  }
+  header @health {
+    -Cache-Control
+    Cache-Control "no-store, no-cache, must-revalidate"
+  }
+
+  # Logging
+  log {
+    output file /data/access.log {
+      roll_size 10mb
+      roll_keep 5
+    }
+    format json
+  }
+}
+
+# Redirecionar HTTP para HTTPS (automatico com Caddy)
+
+# ============================================================
+# Exemplo para subdominio alternativo (API):
+#
+# api.seudominio.com.br {
+#     reverse_proxy consultio-med:5173
+# }
+# ============================================================

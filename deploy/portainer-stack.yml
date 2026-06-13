@@ -1,0 +1,96 @@
+version: "3.8"
+
+services:
+  frontend:
+    image: ghcr.io/fluowai/consultio-frontend:latest
+    environment:
+      VITE_API_URL: "same-origin"
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
+    networks:
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.consultio_frontend.rule=Host(`woomed.consultio.com.br`)"
+        - "traefik.http.routers.consultio_frontend.entrypoints=websecure"
+        - "traefik.http.routers.consultio_frontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.consultio_frontend.priority=1"
+        - "traefik.http.routers.consultio_frontend.service=consultio_frontend"
+        - "traefik.http.services.consultio_frontend.loadbalancer.server.port=80"
+
+  api:
+    image: ghcr.io/fluowai/consultio-api:latest
+    environment:
+      NODE_ENV: production
+      PORT: 5173
+      ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
+      CORS_ORIGIN: "https://woomed.consultio.com.br"
+
+      JWT_SECRET: "bhj47BqUl6kamMPlO1lTR8gEiiKJNgD8m7acHGwJGwXkS1ywp63fq6pLMEWiCQDwmeB44AId/a4mA+HyJn/J6g=="
+      ENCRYPTION_MASTER_KEY: "7cbe5fe2092b2bf6b4dab111be5053e838e18ae7b7525d8afabed7d556160c9e"
+
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
+      SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      DATABASE_URL: "postgresql://postgres.fmhmmayrlsgdmxabosou:XJfbFSNB2rXf73TO@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+      PGSSLMODE: require
+
+      WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
+      WHATSMEOW_API_TOKEN: ""
+      WHATSMEOW_WEBHOOK_SECRET: "9xwb/LUenm7sYIEby+Y+j4eoNZIwN0fS"
+
+      GEMINI_API_KEY: ""
+
+      PLATFORM_OWNER_EMAIL: "admin@consultio.com.br"
+    volumes:
+      - consultio_data:/app/data
+      - consultio_uploads:/app/uploads
+    networks:
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.consultio_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.consultio_api.entrypoints=websecure"
+        - "traefik.http.routers.consultio_api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.consultio_api.priority=10"
+        - "traefik.http.routers.consultio_api.service=consultio_api"
+        - "traefik.http.services.consultio_api.loadbalancer.server.port=5173"
+
+  whatsmeow-bridge:
+    image: ghcr.io/fluowai/consultio-whatsmeow:latest
+    environment:
+      PORT: 8080
+      WHATSMEOW_DATA_DIR: /app/data
+      APP_WEBHOOK_URL: http://api:5173/api/whatsapp/webhook
+      WHATSMEOW_WEBHOOK_SECRET: "9xwb/LUenm7sYIEby+Y+j4eoNZIwN0fS"
+      WHATSMEOW_API_TOKEN: ""
+    volumes:
+      - whatsmeow_data:/app/data
+    networks:
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+
+volumes:
+  consultio_data:
+  consultio_uploads:
+  whatsmeow_data:
+
+networks:
+  woopanel1:
+    external: true
+  consultio_internal:
+    driver: overlay

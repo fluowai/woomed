@@ -15,37 +15,142 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileText,
-  X
+  Edit2,
+  Check,
+  X 
 } from 'lucide-react';
-import { MOCK_PATIENTS, MOCK_MEDICAL_RECORDS, MedicalRecord, Patient, MedicalRecordEntry } from '../types';
-import { useState } from 'react';
+import { Doctor, Patient, MedicalRecord, MedicalRecordEntry } from '../types';
+import React, { useState, useEffect } from 'react';
 
-export default function MedicalRecords() {
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+interface MedicalRecordsProps {
+  patients: Patient[];
+  medicalRecords: Record<string, MedicalRecord>;
+  doctors: Doctor[];
+  onAddMedicalRecordEntry: (patientId: string, entry: MedicalRecordEntry) => void;
+  onUpdateMedicalRecordMetadata: (
+    patientId: string, 
+    metadata: { 
+      bloodType: string; 
+      allergies: string[]; 
+      medications: string[]; 
+      chronicDiseases: string[];
+      gender: string;
+    }
+  ) => void;
+  activePatientId: string | null;
+  onActivePatientIdChange: (id: string | null) => void;
+}
+
+export default function MedicalRecords({
+  patients,
+  medicalRecords,
+  doctors,
+  onAddMedicalRecordEntry,
+  onUpdateMedicalRecordMetadata,
+  activePatientId,
+  onActivePatientIdChange
+}: MedicalRecordsProps) {
+  
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   
-  const selectedPatient = MOCK_PATIENTS.find(p => p.id === selectedPatientId);
-  const selectedRecord = selectedPatientId ? MOCK_MEDICAL_RECORDS[selectedPatientId] : null;
+  // Modal states for New Evolution
+  const [isEvolutionOpen, setIsEvolutionOpen] = useState(false);
+  const [evoDoctor, setEvoDoctor] = useState('');
+  const [evoDiagnosis, setEvoDiagnosis] = useState('');
+  const [evoNotes, setEvoNotes] = useState('');
+  const [evoPrescription, setEvoPrescription] = useState('');
+
+  // Editing Metadata states
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
+  const [metaBloodType, setMetaBloodType] = useState('A+');
+  const [metaGender, setMetaGender] = useState('Feminino');
+  const [metaAllergies, setMetaAllergies] = useState('');
+  const [metaMedications, setMetaMedications] = useState('');
+  const [metaChronic, setMetaChronic] = useState('');
+
+  const selectedPatient = patients.find(p => p.id === activePatientId);
+  const selectedRecord = activePatientId ? medicalRecords[activePatientId] : null;
   const selectedEntry = selectedRecord?.entries.find(e => e.id === selectedEntryId);
+
+  useEffect(() => {
+    if (!evoDoctor && doctors[0]) {
+      setEvoDoctor(doctors[0].name);
+    }
+  }, [doctors, evoDoctor]);
+
+  // Sync edit form with current records when editing is toggled
+  useEffect(() => {
+    if (selectedRecord && isEditingMeta) {
+      setMetaBloodType(selectedRecord.bloodType || 'A+');
+      setMetaGender(selectedRecord.gender || 'Feminino');
+      setMetaAllergies(selectedRecord.allergies.join(', '));
+      setMetaMedications(selectedRecord.medications.join(', '));
+      setMetaChronic(selectedRecord.chronicDiseases.join(', '));
+    }
+  }, [isEditingMeta, selectedRecord]);
+
+  const handleEvolutionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activePatientId || !evoNotes) return;
+
+    const newEntry: MedicalRecordEntry = {
+      id: 'e-' + Date.now().toString(),
+      date: new Date().toISOString().split('T')[0],
+      doctorName: evoDoctor,
+      notes: evoNotes,
+      diagnosis: evoDiagnosis || undefined,
+      prescription: evoPrescription || undefined
+    };
+
+    onAddMedicalRecordEntry(activePatientId, newEntry);
+    
+    // Reset form
+    setEvoDiagnosis('');
+    setEvoNotes('');
+    setEvoPrescription('');
+    setIsEvolutionOpen(false);
+  };
+
+  const handleMetadataSave = () => {
+    if (!activePatientId) return;
+
+    const parsedAllergies = metaAllergies.split(',').map(s => s.trim()).filter(Boolean);
+    const parsedMedications = metaMedications.split(',').map(s => s.trim()).filter(Boolean);
+    const parsedChronic = metaChronic.split(',').map(s => s.trim()).filter(Boolean);
+
+    onUpdateMedicalRecordMetadata(activePatientId, {
+      bloodType: metaBloodType,
+      allergies: parsedAllergies,
+      medications: parsedMedications,
+      chronicDiseases: parsedChronic,
+      gender: metaGender
+    });
+
+    setIsEditingMeta(false);
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {!selectedPatientId ? (
+      {!activePatientId ? (
         <div className="p-8 h-full overflow-y-auto">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-slate-800">Prontuários Eletrônicos</h2>
             <p className="text-sm text-slate-500 font-medium">Selecione um paciente para visualizar seu histórico médico completo.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {MOCK_PATIENTS.map((patient) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+            {patients.map((patient) => (
               <div 
                 key={patient.id}
-                onClick={() => setSelectedPatientId(patient.id)}
-                className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group flex flex-col items-center text-center"
+                onClick={() => onActivePatientIdChange(patient.id)}
+                className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group flex flex-col items-center text-center"
               >
-                <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                  <User size={40} />
+                <div className="w-20 h-20 rounded-[24px] bg-blue-50 border border-slate-100 flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform overflow-hidden shrink-0">
+                  {patient.avatarUrl ? (
+                    <img src={patient.avatarUrl} alt={patient.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={36} />
+                  )}
                 </div>
                 <h3 className="font-black text-slate-800 uppercase tracking-tight mb-1">{patient.fullName}</h3>
                 <p className="text-xs text-slate-500 font-bold mb-4 uppercase">CPF: {patient.cpf}</p>
@@ -64,105 +169,223 @@ export default function MedicalRecords() {
           <div className="px-8 py-4 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm z-10">
             <div className="flex items-center gap-4">
               <button 
-                onClick={() => setSelectedPatientId(null)}
+                onClick={() => onActivePatientIdChange(null)}
                 className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                title="Voltar para a lista"
               >
                 <ChevronRight size={24} className="rotate-180" />
               </button>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-black">
-                  {selectedPatient?.fullName.charAt(0)}
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 border border-slate-200 flex items-center justify-center text-blue-700 font-black overflow-hidden shrink-0">
+                  {selectedPatient?.avatarUrl ? (
+                    <img src={selectedPatient.avatarUrl} alt={selectedPatient.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{selectedPatient?.fullName.charAt(0)}</span>
+                  )}
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900">{selectedPatient?.fullName}</h3>
-                  <span className="text-xs text-slate-400 font-medium tracking-tight">Paciente ID: {selectedPatientId}</span>
+                  <span className="text-xs text-slate-400 font-medium tracking-tight">CPF: {selectedPatient?.cpf}</span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-full font-bold text-xs uppercase tracking-widest shadow-md hover:bg-blue-700 transition-all">
+              <button 
+                onClick={() => setIsEvolutionOpen(true)}
+                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-full font-bold text-xs uppercase tracking-widest shadow-md hover:bg-blue-700 transition-all"
+              >
                 <Plus size={16} />
                 <span>Nova Evolução</span>
               </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden flex">
+          <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
             {/* Left Column: Fixed Info */}
-            <div className="w-80 border-r border-slate-200 bg-white overflow-y-auto p-6 space-y-8">
-              <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white overflow-y-auto p-6 space-y-8 shrink-0">
+              
+              {/* Dynamic Metadata Card */}
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <Activity size={14} className="text-blue-500" />
-                  Informações Básicas
+                  Ficha Médica Básica
                 </h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Tipo Sanguíneo</span>
-                    <span className="font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{selectedRecord?.bloodType || 'N/A'}</span>
+                
+                {isEditingMeta ? (
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      onClick={handleMetadataSave}
+                      className="p-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
+                      title="Salvar alterações"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button 
+                      onClick={() => setIsEditingMeta(false)}
+                      className="p-1 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"
+                      title="Cancelar"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Sexo</span>
-                    <span className="font-bold text-slate-800">Feminino</span>
+                ) : (
+                  <button 
+                    onClick={() => setIsEditingMeta(true)}
+                    className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-50"
+                    title="Editar informações básicas"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                )}
+              </div>
+
+              {isEditingMeta ? (
+                <div className="space-y-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-200/60">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Tipo Sanguíneo</label>
+                    <select 
+                      value={metaBloodType} 
+                      onChange={(e) => setMetaBloodType(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                      <option value="Desconhecido">Desconhecido</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Gênero</label>
+                    <select 
+                      value={metaGender} 
+                      onChange={(e) => setMetaGender(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Feminino">Feminino</option>
+                      <option value="Masculino">Masculino</option>
+                      <option value="Não-Binário">Não-Binário</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Alergias (separadas por vírgula)</label>
+                    <input 
+                      type="text" 
+                      value={metaAllergies} 
+                      onChange={(e) => setMetaAllergies(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Medicamentos Contínuos</label>
+                    <input 
+                      type="text" 
+                      value={metaMedications} 
+                      onChange={(e) => setMetaMedications(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">Doenças Crônicas</label>
+                    <input 
+                      type="text" 
+                      value={metaChronic} 
+                      onChange={(e) => setMetaChronic(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                    />
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertTriangle size={14} className="text-amber-500" />
-                  Alergias
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedRecord?.allergies.map(a => (
-                    <span key={a} className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold border border-amber-100">{a}</span>
-                  ))}
-                  {selectedRecord?.allergies.length === 0 && <span className="text-xs text-slate-400">Nenhuma alergia relatada</span>}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Pill size={14} className="text-blue-500" />
-                  Medicamentos Atuais
-                </h4>
-                <div className="space-y-2">
-                  {selectedRecord?.medications.map(m => (
-                    <div key={m} className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-xs font-bold text-blue-900">{m}</span>
+              ) : (
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-500">Tipo Sanguíneo</span>
+                      <span className="font-black text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-md text-xs">{selectedRecord?.bloodType || 'N/A'}</span>
                     </div>
-                  ))}
-                  {selectedRecord?.medications.length === 0 && <span className="text-xs text-slate-400">Nenhum medicamento de uso contínuo</span>}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Stethoscope size={14} className="text-purple-600" />
-                  Doenças Crônicas
-                </h4>
-                <div className="space-y-2">
-                  {selectedRecord?.chronicDiseases.map(d => (
-                    <div key={d} className="p-3 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-purple-500" />
-                      <span className="text-xs font-bold text-purple-900">{d}</span>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-500">Gênero</span>
+                      <span className="font-bold text-slate-800">{selectedRecord?.gender || 'Feminino'}</span>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Allergies */}
+                  <div>
+                    <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <AlertTriangle size={12} className="text-amber-500" />
+                      Alergias
+                    </h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedRecord?.allergies.map(a => (
+                        <span key={a} className="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">{a}</span>
+                      ))}
+                      {(!selectedRecord?.allergies || selectedRecord.allergies.length === 0) && (
+                        <span className="text-xs text-slate-400 italic">Nenhuma alergia relatada</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Medications */}
+                  <div>
+                    <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <Pill size={12} className="text-blue-500" />
+                      Medicamentos Atuais
+                    </h5>
+                    <div className="space-y-2">
+                      {selectedRecord?.medications.map(m => (
+                        <div key={m} className="p-2.5 bg-blue-50 rounded-xl border border-blue-100/50 flex items-center gap-2.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span className="text-xs font-bold text-blue-900">{m}</span>
+                        </div>
+                      ))}
+                      {(!selectedRecord?.medications || selectedRecord.medications.length === 0) && (
+                        <span className="text-xs text-slate-400 italic">Nenhum medicamento registrado</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Chronic Diseases */}
+                  <div>
+                    <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <Stethoscope size={12} className="text-purple-600" />
+                      Doenças Crônicas
+                    </h5>
+                    <div className="space-y-2">
+                      {selectedRecord?.chronicDiseases.map(d => (
+                        <div key={d} className="p-2.5 bg-purple-50 rounded-xl border border-purple-100/50 flex items-center gap-2.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                          <span className="text-xs font-bold text-purple-900">{d}</span>
+                        </div>
+                      ))}
+                      {(!selectedRecord?.chronicDiseases || selectedRecord.chronicDiseases.length === 0) && (
+                        <span className="text-xs text-slate-400 italic">Nenhuma patologia crônica cadastrada</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Right Column: Timeline / Entries */}
-            <div className="flex-1 bg-slate-50/50 overflow-y-auto p-10">
+            <div className="flex-1 bg-slate-50/50 overflow-y-auto p-6 md:p-10 pb-24">
               <div className="max-w-3xl mx-auto">
                 <div className="flex items-center gap-4 mb-8">
                   <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-slate-200 flex items-center justify-center text-blue-600">
                     <History size={24} />
                   </div>
                   <div>
-                    <h4 className="text-lg font-bold text-slate-900">Histórico de Consultas</h4>
-                    <span className="text-xs text-slate-500 font-medium">Linha do tempo de evoluções médicas</span>
+                    <h4 className="text-lg font-bold text-slate-900">Histórico Clínico</h4>
+                    <span className="text-xs text-slate-500 font-medium font-bold uppercase tracking-wide">Linha do tempo de consultas e evoluções</span>
                   </div>
                 </div>
 
@@ -177,7 +400,7 @@ export default function MedicalRecords() {
                         <ClipboardCheck size={20} />
                       </div>
                       
-                      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                      <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-black text-slate-900 uppercase tracking-tighter">{entry.doctorName}</span>
@@ -187,17 +410,17 @@ export default function MedicalRecords() {
                               <span className="text-xs font-bold font-mono">{entry.date}</span>
                             </div>
                           </div>
-                          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-white border border-blue-100 px-2.5 py-1 rounded-lg">Consulta</span>
+                          <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-white border border-blue-100 px-2.5 py-1 rounded-lg">Consulta</span>
                         </div>
                         
                         <div className="p-6 space-y-4">
                           <div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Diagnóstico</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Diagnóstico</span>
                             <p className="text-sm font-bold text-slate-800">{entry.diagnosis || 'Não especificado'}</p>
                           </div>
                           
                           <div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Evolução / Notas</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Evolução / Notas</span>
                             <p className="text-sm text-slate-600 leading-relaxed font-medium">{entry.notes}</p>
                           </div>
 
@@ -205,9 +428,9 @@ export default function MedicalRecords() {
                             <div className="pt-4 mt-4 border-t border-dashed border-slate-200">
                               <div className="flex items-center gap-2 mb-2">
                                 <FileText size={14} className="text-rose-500" />
-                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest font-mono">Prescrição Médica</span>
+                                <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest font-mono">Receita / Prescrição</span>
                               </div>
-                              <p className="text-sm font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-mono italic">
+                              <p className="text-sm font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-mono italic whitespace-pre-line">
                                 {entry.prescription}
                               </p>
                             </div>
@@ -218,16 +441,120 @@ export default function MedicalRecords() {
                   ))}
                   
                   {(!selectedRecord?.entries || selectedRecord.entries.length === 0) && (
-                    <div className="flex flex-col items-center justify-center p-20 text-slate-300 bg-white rounded-3xl border border-slate-200 border-dashed ml-12">
+                    <div className="flex flex-col items-center justify-center p-20 text-slate-300 bg-white rounded-[32px] border border-slate-200 border-dashed ml-12">
                       <History size={48} className="mb-4 opacity-30" />
-                      <p className="font-bold">Nenhum registro encontrado para este paciente.</p>
-                      <button className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-full text-xs font-bold shadow-lg shadow-blue-100">Iniciar Primeira Evolução</button>
+                      <p className="font-bold">Nenhum histórico registrado.</p>
+                      <button 
+                        onClick={() => setIsEvolutionOpen(true)}
+                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full text-xs font-bold shadow-lg shadow-blue-100 uppercase tracking-wider"
+                      >
+                        Iniciar Primeira Evolução
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* New Evolution Modal Form */}
+      {isEvolutionOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <form 
+            onSubmit={handleEvolutionSubmit}
+            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                  <ClipboardCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 tracking-tight">Nova Evolução Clínica</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Histórico clínico de {selectedPatient?.fullName}</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsEvolutionOpen(false)} 
+                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all font-bold text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Doctor Selection */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profissional Responsável *</label>
+                  <select 
+                    value={evoDoctor}
+                    onChange={(e) => setEvoDoctor(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  >
+                    {doctors.map(d => <option key={d.id} value={d.name}>{d.name} ({d.specialty})</option>)}
+                  </select>
+                </div>
+
+                {/* Diagnosis */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diagnóstico Clínico</label>
+                  <input 
+                    type="text"
+                    value={evoDiagnosis}
+                    onChange={(e) => setEvoDiagnosis(e.target.value)}
+                    placeholder="Ex: Hipertensão essencial, Lombalgia crônica..."
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Evolution Notes */}
+                <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Evolução / Notas Clínicas *</label>
+                  <textarea 
+                    required
+                    value={evoNotes}
+                    onChange={(e) => setEvoNotes(e.target.value)}
+                    rows={5}
+                    placeholder="Descreva a queixa do paciente, exames físicos, observações clínicas e conduta adotada..."
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-bold"
+                  />
+                </div>
+
+                {/* Prescription */}
+                <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receita Médica / Prescrição</label>
+                  <textarea 
+                    value={evoPrescription}
+                    onChange={(e) => setEvoPrescription(e.target.value)}
+                    rows={3}
+                    placeholder="Medicamentos prescritos, dosagens e orientações de uso..."
+                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-blue-100 outline-none w-full font-mono italic"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+              <button 
+                type="submit"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
+              >
+                Salvar Evolução
+              </button>
+              <button 
+                type="button"
+                onClick={() => setIsEvolutionOpen(false)}
+                className="px-8 bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
