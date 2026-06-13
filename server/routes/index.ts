@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData, AppData } from "../data";
 import { AuthedRequest, sessions, getToken, requireAuth, requireRoles } from "../middleware";
-import { audit, getServicePrice, isSlotAvailable, buildSuggestions, addMinutes, normalize, nowIso } from "../helpers";
+import { audit, getServicePrice, isSlotAvailable, buildSuggestions, addMinutes, normalize, nowIso, sanitizeUpdate } from "../helpers";
 import { patientSchema, appointmentSchema, financeTransactionSchema, agentSchema, campaignSchema } from "../schemas";
 import {
   Patient, Appointment, FinanceTransaction, ServiceAgent, MarketingCampaign,
@@ -24,23 +24,7 @@ export function registerRoutes(app: Express) {
 
   // AUTH
   app.post("/api/auth/login", async (req, res) => {
-    if (process.env.NODE_ENV === "production") {
-      console.warn(`[SECURITY] PIN login tentativa do IP ${req.ip}`);
-      return res.status(403).json({ error: "Login por PIN desativado. Use /api/v2/auth/login com email e senha.", code: "LEGACY_AUTH_DISABLED" });
-    }
-    if (process.env.ENABLE_LEGACY_PIN_LOGIN !== "true") {
-      return res.status(403).json({ error: "PIN login desativado. Configure ENABLE_LEGACY_PIN_LOGIN=true para ativar.", code: "LEGACY_AUTH_NOT_ENABLED" });
-    }
-
-    const { userId, pin } = req.body || {};
-    const data = await loadData();
-    const serverUser = data.users.find(u => u.id === userId && u.pin === pin);
-    if (!serverUser) return res.status(401).json({ error: "Usuario ou PIN invalido." });
-    const user = { id: serverUser.id, name: serverUser.name, role: serverUser.role, specialty: serverUser.specialty };
-    const token = randomUUID();
-    sessions.set(token, user);
-    await audit(data, user, "login", "session", token, "Entrada no sistema");
-    res.json({ token, user, state: buildState(data, user) });
+    return res.status(403).json({ error: "Login por PIN desativado. Use /api/v2/auth/login com email e senha.", code: "LEGACY_AUTH_DISABLED" });
   });
 
   app.post("/api/auth/logout", requireAuth, async (req: AuthedRequest, res) => {
@@ -255,9 +239,8 @@ export function registerRoutes(app: Express) {
     if (idx === -1) return res.status(404).json({ error: "LLM nao encontrada." });
     if (req.body?.isDefault) data.llmProviderConfigs = data.llmProviderConfigs.map(item => ({ ...item, isDefault: false }));
     const current = data.llmProviderConfigs[idx];
-    const patch = { ...req.body };
-    if (patch.apiKey) patch.apiKeyMasked = `****${String(patch.apiKey).slice(-4)}`;
-    delete patch.apiKey;
+    const allowedFields: (keyof LlmProviderConfig)[] = ["name", "provider", "model", "endpoint", "temperature", "maxTokens", "isDefault", "isActive"];
+    const patch = sanitizeUpdate<LlmProviderConfig>(req.body, allowedFields);
     data.llmProviderConfigs[idx] = { ...current, ...patch, updatedAt: nowIso() };
     await saveData(data);
     const updated = await dataService.updateOne<LlmProviderConfig>(TABLES.llmProviderConfigs, req.params.id, patch, req.user!, "llmProviderConfigs");
@@ -509,32 +492,34 @@ export function registerRoutes(app: Express) {
 }
 
 function buildState(data: AppData, user: { id: string; name: string; role: string }) {
+  const role = user.role;
+  const financeRoles = ["admin", "finance", "super_admin"];
   return {
     user,
     patients: data.patients,
     doctors: data.doctors,
     appointments: data.appointments,
-    medicalRecords: data.medicalRecords,
-    financeTransactions: data.financeTransactions,
+    medicalRecords: role === "admin" || role === "doctor" || role === "super_admin" ? data.medicalRecords : {},
+    financeTransactions: financeRoles.includes(role) ? data.financeTransactions : [],
     servicePrices: data.servicePrices,
-    auditEvents: user.role === "admin" || user.role === "super_admin" ? data.auditEvents.slice(-200).reverse() : [],
+    auditEvents: role === "admin" || role === "super_admin" ? data.auditEvents.slice(-200).reverse() : [],
     serviceAgents: data.serviceAgents,
     marketingCampaigns: data.marketingCampaigns,
-    tissGuides: data.tissGuides,
+    tissGuides: financeRoles.includes(role) ? data.tissGuides : [],
     inventoryItems: data.inventoryItems,
     referrals: data.referrals,
     references: data.references,
     helpTickets: data.helpTickets,
-    llmProviderConfigs: data.llmProviderConfigs,
+    llmProviderConfigs: role === "admin" || role === "super_admin" ? data.llmProviderConfigs : [],
     agentTemplates: data.agentTemplates,
     neuralKnowledge: data.neuralKnowledge,
     patientDocuments: data.patientDocuments,
     waitingList: data.waitingList,
     scheduleBlocks: data.scheduleBlocks,
     medicalTemplates: data.medicalTemplates,
-    accountsPayable: data.accountsPayable,
-    paymentGatewayConfig: data.paymentGatewayConfig,
-    tenants: user.role === "super_admin" ? data.tenants : [],
-    plans: user.role === "super_admin" ? data.plans : []
+    accountsPayable: financeRoles.includes(role) ? data.accountsPayable : [],
+    paymentGatewayConfig: role === "admin" || role === "super_admin" ? data.paymentGatewayConfig : [],
+    tenants: role === "super_admin" ? data.tenants : [],
+    plans: role === "super_admin" ? data.plans : []
   };
 }

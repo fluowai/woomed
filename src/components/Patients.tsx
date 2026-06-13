@@ -147,7 +147,7 @@ export default function Patients({
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto bg-slate-50">
+    <div className="p-4 lg:p-8 h-full overflow-y-auto bg-slate-50 pb-20 lg:pb-8">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -156,39 +156,84 @@ export default function Patients({
         onChange={handleFileChange}
       />
 
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Gestão de Pacientes</h2>
-          <p className="text-sm text-slate-500 font-medium">Visualize, cadastre e gerencie os pacientes da clínica.</p>
+      <div className="flex items-center justify-between mb-4 lg:mb-8">
+        <div className="min-w-0">
+          <h2 className="text-lg lg:text-2xl font-bold text-slate-800">Gestão de Pacientes</h2>
+          <p className="text-xs lg:text-sm text-slate-500 font-medium hidden lg:block">Visualize, cadastre e gerencie os pacientes da clínica.</p>
         </div>
         
         <button 
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95"
+          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 lg:px-6 py-2.5 lg:py-3 rounded-xl font-bold text-xs lg:text-sm transition-all shadow-md active:scale-95"
         >
-          <UserPlus size={20} />
-          <span>Cadastrar Novo Paciente</span>
+          <UserPlus size={18} />
+          <span className="hidden lg:inline">Cadastrar</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar por nome ou CPF..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-            />
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{filteredPatients.length} PACIENTES ENCONTRADOS</span>
-          </div>
-        </div>
+      {/* Search bar */}
+      <div className="relative w-full mb-4">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <input 
+          type="text" 
+          placeholder="Buscar por nome ou CPF..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 outline-none transition-all shadow-sm"
+        />
+      </div>
 
+      {/* Mobile Patient Cards */}
+      <div className="lg:hidden space-y-3">
+        {filteredPatients.map((patient) => (
+          <div key={patient.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-start gap-3">
+              <div 
+                onClick={() => handleAvatarClick(patient.id)}
+                className="relative w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 font-bold overflow-hidden shrink-0 cursor-pointer"
+              >
+                {patient.avatarUrl ? (
+                  <img src={patient.avatarUrl} alt={patient.fullName} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-lg">{patient.fullName.charAt(0)}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-black text-slate-800 uppercase tracking-tight block truncate">{patient.fullName}</span>
+                <span className="text-[10px] font-bold text-slate-400 font-mono">CPF: {patient.cpf}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <Phone size={12} className="text-teal-500 shrink-0" />
+                  <span className="text-xs text-slate-600">{patient.phone || 'Sem telefone'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
+              <button onClick={() => onScheduleForPatient(patient.fullName)} className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-xl" title="Agendar">
+                <Calendar size={18} />
+              </button>
+              <button onClick={() => onViewMedicalRecord(patient.id)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl" title="Prontuário">
+                <FileText size={18} />
+              </button>
+              <button onClick={() => openEditModal(patient)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl" title="Editar">
+                <Edit2 size={18} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {filteredPatients.length === 0 && (
+          <div className="p-10 flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+            <Search size={36} className="mb-3 opacity-20" />
+            <p className="font-bold text-sm">Nenhum paciente encontrado</p>
+            <button className="mt-3 text-teal-600 font-bold text-xs" onClick={() => setSearchTerm('')}>Limpar busca</button>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Patient Table */}
+      <div className="hidden lg:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{filteredPatients.length} PACIENTES ENCONTRADOS</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
@@ -207,7 +252,7 @@ export default function Patients({
                     <div className="flex items-center gap-4">
                       <div 
                         onClick={() => handleAvatarClick(patient.id)}
-                        className="relative w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shadow-sm border border-slate-100 cursor-pointer overflow-hidden transition-all hover:ring-2 hover:ring-blue-500 group/avatar shrink-0"
+                        className="relative w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 font-bold text-lg shadow-sm border border-slate-100 cursor-pointer overflow-hidden transition-all hover:ring-2 hover:ring-teal-500 group/avatar shrink-0"
                         title="Alterar avatar do paciente"
                       >
                         {patient.avatarUrl ? (
@@ -220,7 +265,7 @@ export default function Patients({
                         </div>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-600 transition-colors">{patient.fullName}</span>
+                        <span className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-teal-600 transition-colors">{patient.fullName}</span>
                         <div className="flex items-center gap-1.5 text-slate-400">
                           <Calendar size={12} className="shrink-0" />
                           <span className="text-xs font-bold">{new Date(patient.birthDate + 'T00:00:00').toLocaleDateString()}</span>
@@ -235,7 +280,7 @@ export default function Patients({
                         <CreditCard size={14} className="text-slate-400" />
                         <span className="text-xs font-bold font-mono">CPF: {patient.cpf}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-blue-600/60">
+                      <div className="flex items-center gap-1.5 text-teal-600/60">
                         <FileText size={14} />
                         <span className="text-[10px] font-black uppercase tracking-wider">Histórico Ativo</span>
                       </div>
@@ -245,7 +290,7 @@ export default function Patients({
                   <td className="px-8 py-6">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5 text-slate-600">
-                        <Phone size={14} className="text-blue-500" />
+                        <Phone size={14} className="text-teal-500" />
                         <span className="text-xs font-bold">{patient.phone}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-400">
@@ -276,7 +321,7 @@ export default function Patients({
                       </button>
                       <button 
                         onClick={() => onViewMedicalRecord(patient.id)}
-                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" 
+                        className="p-2.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-all" 
                         title="Ver Prontuário"
                       >
                         <FileText size={20} />
@@ -299,7 +344,7 @@ export default function Patients({
             <div className="p-20 flex flex-col items-center justify-center text-slate-400">
               <Search size={48} className="mb-4 opacity-20" />
               <p className="font-bold">Nenhum paciente cadastrado para sua busca.</p>
-              <button className="mt-4 text-blue-600 font-bold hover:underline" onClick={() => setSearchTerm('')}>Limpar busca</button>
+              <button className="mt-4 text-teal-600 font-bold hover:underline" onClick={() => setSearchTerm('')}>Limpar busca</button>
             </div>
           )}
         </div>
@@ -307,10 +352,10 @@ export default function Patients({
 
       {/* Create Patient Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto">
           <form 
             onSubmit={handleCreateSubmit}
-            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+            className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-[32px] shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] flex flex-col"
           >
             <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
@@ -331,7 +376,7 @@ export default function Patients({
               </button>
             </div>
             
-            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+            <div className="p-4 lg:p-8 space-y-6 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Full name */}
                 <div className="flex flex-col gap-2">
@@ -478,10 +523,10 @@ export default function Patients({
 
       {/* Edit Patient Modal */}
       {isEditOpen && selectedPatientForEdit && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto">
           <form 
             onSubmit={handleEditSubmit}
-            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+            className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-[32px] shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] flex flex-col"
           >
             <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
@@ -505,7 +550,7 @@ export default function Patients({
               </button>
             </div>
             
-            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+            <div className="p-4 lg:p-8 space-y-6 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Full name */}
                 <div className="flex flex-col gap-2">
@@ -634,8 +679,8 @@ export default function Patients({
 
       {/* Avatar Upload Modal */}
       {editingPatientId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden border border-slate-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4">
+          <div className="bg-white w-full lg:max-w-md rounded-t-[32px] lg:rounded-[32px] shadow-2xl overflow-hidden border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-bold text-slate-900">Atualizar Foto do Paciente</h3>
               <button 

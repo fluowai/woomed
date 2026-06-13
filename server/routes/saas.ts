@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData } from "../data";
 import { AuthedRequest, requireAuth, requireRoles } from "../middleware";
-import { audit, nowIso } from "../helpers";
+import { audit, nowIso, sanitizeUpdate } from "../helpers";
 import { Tenant, SaaSPlan, PlatformOwner } from "../../src/types";
 
 export function registerSaaSRoutes(app: Express) {
@@ -48,9 +48,11 @@ export function registerSaaSRoutes(app: Express) {
     const data = await loadData();
     const idx = data.tenants.findIndex(t => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Tenant nao encontrado." });
-    const updated: Tenant = { ...data.tenants[idx], ...req.body, id: data.tenants[idx].id, updatedAt: nowIso() };
+    const allowedFields: (keyof Tenant)[] = ["legalName", "tradeName", "document", "ownerName", "ownerEmail", "phone", "status", "planId", "timezone", "locale", "settings", "trialEndsAt"];
+    const sanitized = sanitizeUpdate<Tenant>(req.body, allowedFields);
+    const updated: Tenant = { ...data.tenants[idx], ...sanitized, id: data.tenants[idx].id, updatedAt: nowIso() };
     data.tenants[idx] = updated;
-    await audit(data, req.user!, "update", "saas_tenant", updated.id, req.body.status ? `Status: ${req.body.status}` : updated.tradeName);
+    await audit(data, req.user!, "update", "saas_tenant", updated.id, req.body.status ? `Status: ${sanitized.status}` : updated.tradeName);
     await saveData(data);
     res.json({ tenant: updated });
   });
@@ -104,7 +106,9 @@ export function registerSaaSRoutes(app: Express) {
     const data = await loadData();
     const idx = data.plans.findIndex(p => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Plano nao encontrado." });
-    const updated: SaaSPlan = { ...data.plans[idx], ...req.body, id: data.plans[idx].id, updatedAt: nowIso() };
+    const allowedFields: (keyof SaaSPlan)[] = ["code", "name", "description", "priceCents", "currency", "billingInterval", "limits", "features", "isActive", "sortOrder"];
+    const sanitized = sanitizeUpdate<SaaSPlan>(req.body, allowedFields);
+    const updated: SaaSPlan = { ...data.plans[idx], ...sanitized, id: data.plans[idx].id, updatedAt: nowIso() };
     data.plans[idx] = updated;
     await audit(data, req.user!, "update", "saas_plan", updated.id, updated.name);
     await saveData(data);

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { loadData, saveData, AppData } from "./data";
 import { audit } from "./helpers";
-import { hashPassword } from "./auth";
+import { hashPassword, validatePassword } from "./auth";
 import { AppUser } from "../src/types";
 
 export interface UserCreateInput {
@@ -25,6 +25,10 @@ export async function createUser(input: UserCreateInput, actor: AppUser): Promis
   const existing = data.users.find(u => u.email?.toLowerCase() === input.email.toLowerCase());
   if (existing) {
     throw new Error("Ja existe um usuario com este email.");
+  }
+  const passwordError = validatePassword(input.password);
+  if (passwordError) {
+    throw new Error(passwordError);
   }
   const newUser = {
     id: `u-${Date.now()}`,

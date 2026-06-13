@@ -77,7 +77,7 @@ export default function App() {
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
-  // Dynamic States for 100% Functional CRUD
+  // Dynamic States
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -842,22 +842,11 @@ export default function App() {
     <ToastProvider>
       <ToastListener />
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
-      {/* Sidebar Overlay for Mobile */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      <div className={`fixed inset-y-0 left-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out`}>
-        <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
-          setActiveView(view);
-          setIsSidebarOpen(false);
-        }} userRole={currentUser?.role} />
-      </div>
+      <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
+        setActiveView(view);
+      }} userRole={currentUser?.role} />
       
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
         <Header 
           onMenuClick={() => setIsSidebarOpen(true)} 
           activeView={activeView}
@@ -871,10 +860,10 @@ export default function App() {
 
         {/* Floating Action Buttons */}
         {!['Mensagens', 'Conexoes', 'Assistente IA', 'Conversas Agentes'].includes(activeView) && (
-          <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 flex flex-col gap-4 z-30">
+          <div className="fixed bottom-20 right-4 md:bottom-10 md:right-10 flex flex-col gap-3 z-30 lg:bottom-10">
             <button 
               onClick={() => setIsSchedulingOpen(true)}
-              className="w-14 h-14 md:w-16 md:h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
+              className="w-14 h-14 md:w-16 md:h-16 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl shadow-xl shadow-teal-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
               title="Novo Agendamento"
             >
               <Plus size={28} className="group-hover:rotate-90 transition-transform" />
@@ -894,11 +883,11 @@ export default function App() {
         {isSchedulingOpen && (
           <div 
             onClick={() => setIsSchedulingOpen(false)}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto"
           >
             <div 
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden border border-slate-100"
+              className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-[40px] shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] lg:max-h-none flex flex-col"
             >
               <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
                 <div className="flex items-center gap-3">
@@ -918,8 +907,8 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="p-8 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="p-4 lg:p-8 space-y-6 lg:space-y-8 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
                   <div className="space-y-6">
                     {/* Patient selection */}
                     <div className="flex flex-col gap-2">
@@ -1057,17 +1046,17 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 pt-6">
+              </div>
+                <div className="p-4 lg:p-8 border-t border-slate-100 bg-white">
                   <button 
                     type="button"
                     onClick={handleAddAppointment}
                     disabled={!selectedPatientId || !selectedDoctorId || !selectedDate || !selectedTime || hasConflict}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl py-5 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
+                    className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl py-5 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-teal-100"
                   >
                     {hasConflict ? 'Horário Indisponível' : 'Finalizar Agendamento'}
                   </button>
                 </div>
-              </div>
             </div>
           </div>
         )}

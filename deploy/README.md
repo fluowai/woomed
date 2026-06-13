@@ -2,11 +2,14 @@
 
 > **Status:** Pronto para producao
 > - ✅ TypeScript sem erros | ✅ Build otimizado
-> - ✅ CORS restrito | ✅ Rate limiting | ✅ Helmet
-> - ✅ JWT + MFA | ✅ Criptografia AES-256-GCM
-> - ✅ LGPD | ✅ Auditoria | ✅ Backup automatico
-> - ✅ CI/CD (GitHub Actions) | ✅ Smoke tests
+> - ✅ CORS restrito | ✅ Rate limiting | ✅ Helmet + CSP
+> - ✅ JWT + MFA + Refresh Token Rotation | ✅ Criptografia AES-256-GCM
+> - ✅ LGPD | ✅ Auditoria | ✅ Backup criptografado
+> - ✅ CI/CD (GitHub Actions) | ✅ Security audit scripts
 > - ✅ Dual-write PG/JSON otimizado
+> - ✅ Docker secrets support | ✅ JWT key rotation
+> - ✅ File upload validation (whitelist MIME/ext)
+> - ✅ Password policy (8+ chars, maiuscula, minuscula, numero, especial)
 
 ## Sumario
 
@@ -71,6 +74,19 @@ docker compose logs -f consultio-med
 ```
 
 Acesse: http://localhost:5173
+
+### Security Scripts
+
+```bash
+# Auditoria de seguranca (checa configuracoes)
+npm run security:audit
+
+# Testes de penetracao automatizados (requer servidor rodando)
+npm run security:test
+
+# Ambos
+npm run security:full
+```
 
 ### Comandos uteis
 
@@ -160,12 +176,52 @@ No Portainer, ao criar a stack, ative "Webhook" e configure seu Git para enviar 
 
 ## 4. Variaveis de Ambiente
 
+### Sistema de Secrets (3 fontes)
+
+O Consultio Med suporta 3 fontes para secrets, buscadas nesta ordem:
+
+1. **Docker Secrets** — arquivos em `/run/secrets/<NOME>`
+2. **File Secret** — arquivo customizado definido via `<NOME>_FILE`
+3. **Environment Variable** — variável de ambiente `<NOME>`
+
+Exemplo com Docker Secrets:
+```yaml
+secrets:
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  encryption_key:
+    file: ./secrets/encryption_key.txt
+
+services:
+  consultio-med:
+    secrets:
+      - jwt_secret
+      - encryption_key
+```
+
+Exemplo com File Secret:
+```bash
+export JWT_SECRET_FILE=/etc/secrets/jwt.txt
+export ENCRYPTION_MASTER_KEY_FILE=/etc/secrets/encryption.key
+```
+
+### Rotação de Chaves (Zero Downtime)
+
+Para rotacionar o JWT_SECRET sem invalidar sessoes ativas:
+
+1. Defina a **nova chave** como `JWT_SECRET` (ou `JWT_SECRET_PRIMARY`)
+2. Defina a **chave antiga** como `JWT_SECRET_SECONDARY`
+3. Faça o deploy — tokens antigos ainda funcionam (via fallback)
+4. Aguarde todos os tokens expirarem (24h)
+5. Remova `JWT_SECRET_SECONDARY` no proximo deploy
+
 ### Obrigatorias
 
 | Variavel | Descricao | Exemplo |
 |---|---|---|
-| `JWT_SECRET` | Chave para assinar tokens JWT | `openssl rand -base64 32` |
-| `ENCRYPTION_MASTER_KEY` | Chave mestra para criptografia | `openssl rand -hex 32` |
+| `JWT_SECRET` | Chave para assinar tokens JWT (primaria) | `openssl rand -base64 32` |
+| `JWT_SECRET_SECONDARY` | Chave secundaria (para rotacao zero-downtime) | `openssl rand -base64 32` |
+| `ENCRYPTION_MASTER_KEY` | Chave mestra para criptografia AES-256-GCM | `openssl rand -hex 32` |
 | `DB_PASSWORD` | Senha do PostgreSQL interno | `senha_forte_123` |
 | `WHATSMEOW_WEBHOOK_SECRET` | Segredo do webhook WhatsApp | `openssl rand -hex 32` |
 

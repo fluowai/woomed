@@ -103,50 +103,89 @@ export default function Financeiro({
   };
 
   return (
-    <div className="p-4 md:p-8 h-full overflow-y-auto bg-slate-50">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Financeiro & Faturamento</h2>
-          <p className="text-sm text-slate-500 font-medium">Controle de caixa, receitas, despesas e recebimentos.</p>
+    <div className="p-4 lg:p-8 h-full overflow-y-auto bg-slate-50 pb-20 lg:pb-8">
+      <div className="flex items-center justify-between mb-4 lg:mb-8">
+        <div className="min-w-0">
+          <h2 className="text-lg lg:text-2xl font-bold text-slate-800 truncate">Financeiro</h2>
+          <p className="hidden lg:block text-sm text-slate-500 font-medium">Controle de caixa, receitas, despesas e recebimentos.</p>
         </div>
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95"
+          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 lg:px-6 py-2.5 lg:py-3 rounded-xl font-bold text-xs lg:text-sm transition-all shadow-md active:scale-95"
         >
-          <Plus size={20} />
-          <span>Lancar Receita/Despesa</span>
+          <Plus size={18} />
+          <span className="hidden lg:inline">Lançar</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 mb-6 lg:mb-8">
         <SummaryCard label="Saldo em Caixa" value={saldoCaixa} tone={saldoCaixa >= 0 ? 'green' : 'rose'} icon={<DollarSign size={24} />} hint="Receitas recebidas - despesas" />
         <SummaryCard label="Recebido" value={totalReceitasConcluidas} tone="green" icon={<CheckCircle size={24} />} hint="Entradas confirmadas" trend={<ArrowUpRight size={12} />} />
         <SummaryCard label="Contas a Receber" value={totalReceitasPendentes} tone="blue" icon={<Clock size={24} />} hint="Consultas pendentes" trend={<Clock size={12} />} />
         <SummaryCard label="Total Despesas" value={totalDespesas} tone="rose" icon={<TrendingUp size={24} className="rotate-180" />} hint="Custos da clinica" trend={<ArrowDownRight size={12} />} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
-              <div>
-                <h3 className="font-black text-slate-800 tracking-tight">Extrato Financeiro</h3>
-                <p className="text-xs text-slate-400 font-medium">Receitas de consultas e lancamentos manuais</p>
-              </div>
-              <div className="relative w-full max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="text"
-                  placeholder="Buscar transacoes..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                />
+          <div className="bg-white rounded-[24px] lg:rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 lg:p-6 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-slate-800 tracking-tight text-sm lg:text-base">Extrato Financeiro</h3>
+                  <p className="hidden lg:block text-xs text-slate-400 font-medium">Receitas de consultas e lancamentos manuais</p>
+                </div>
+                <div className="relative w-full max-w-[140px] lg:max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-8 lg:pl-9 pr-3 py-2 text-xs focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile transaction cards */}
+            <div className="lg:hidden divide-y divide-slate-100">
+              {filteredTransactions.map(transaction => (
+                <div key={transaction.id} className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight truncate flex-1">{transaction.description}</span>
+                    <span className={`font-black text-sm ml-2 ${
+                      transaction.type === 'receita' ? 'text-green-600' : 'text-rose-600'
+                    }`}>
+                      {transaction.type === 'receita' ? '+' : '-'} R$ {transaction.value.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 font-mono">{transaction.date}</span>
+                      <span className={`px-2 py-0.5 rounded-full font-black text-[8px] uppercase ${
+                        transaction.type === 'receita' ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {transaction.type}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
+                      transaction.status === 'concluido' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
+                    }`}>
+                      {transaction.status === 'concluido' ? 'OK' : 'Pend.'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {filteredTransactions.length === 0 && (
+                <div className="p-10 text-center text-slate-400 italic text-sm">
+                  Nenhuma transacao encontrada.
+                </div>
+              )}
+            </div>
+
+            {/* Desktop transaction table */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
                   <tr>
@@ -257,10 +296,10 @@ export default function Financeiro({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="font-bold text-slate-900">Novo Lancamento Financeiro</h3>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4">
+          <div className="bg-white w-full lg:max-w-md rounded-t-[32px] lg:rounded-3xl shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col">
+            <div className="p-4 lg:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+              <h3 className="font-bold text-slate-900 text-sm lg:text-base">Novo Lancamento</h3>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
@@ -269,7 +308,7 @@ export default function Financeiro({
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 lg:p-6 space-y-5 lg:space-y-6 overflow-y-auto flex-1">
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Lancamento</label>
                 <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
@@ -332,23 +371,22 @@ export default function Financeiro({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 w-full gap-3 pt-4">
+            </div>
+              <div className="p-4 lg:p-6 border-t border-slate-100 bg-white flex flex-col gap-2">
                 <button
                   onClick={handleAddTransaction}
                   disabled={!desc || !val}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-blue-100"
+                  className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-teal-100"
                 >
                   Confirmar Lancamento
                 </button>
-
                 <button
                   onClick={() => setIsModalOpen(false)}
-                  className="bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
+                  className="w-full bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
                 >
                   Cancelar
                 </button>
               </div>
-            </div>
           </div>
         </div>
       )}

@@ -14,6 +14,9 @@ import {
 } from "../../src/types";
 import { dataService, TABLES } from "../data-service";
 
+const ALLOWED_MIMES = ["image/jpeg", "image/png", "image/webp", "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/plain"];
+const ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt"];
+
 const uploadsDir = path.join(process.cwd(), "uploads", "documents");
 const storage = multer.diskStorage({
   destination: async (_req, _file, cb) => {
@@ -21,15 +24,36 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}${ALLOWED_EXTS.includes(ext) ? ext : ".bin"}`;
+    cb(null, safeName);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+function fileFilter(_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ALLOWED_MIMES.includes(file.mimetype) || ALLOWED_EXTS.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Tipo de arquivo nao permitido: ${file.mimetype || ext}. Permitidos: ${ALLOWED_EXTS.join(", ")}`));
+  }
+}
+
+const upload = multer({ storage, fileFilter, limits: { fileSize: 20 * 1024 * 1024 } });
 
 export function registerPhase2Routes(app: Express) {
   // === PATIENT DOCUMENTS ===
-  app.post("/api/v2/patients/:patientId/documents", requireAuth, requireRoles("admin", "doctor", "reception"), upload.single("file"), async (req: AuthedRequest, res) => {
+  app.post("/api/v2/patients/:patientId/documents", requireAuth, requireRoles("admin", "doctor", "reception"), (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "Arquivo muito grande. Tamanho maximo: 20MB." });
+      }
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      next();
+    });
+  }, async (req: AuthedRequest, res) => {
     const data = await loadData();
     const patient = data.patients.find(p => p.id === req.params.patientId);
     if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
@@ -326,7 +350,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   // === EXPORT CSV/XLSX ===
-  app.get("/api/v2/export/:entity", requireAuth, async (req, res) => {
+  app.get("/api/v2/export/:entity", requireAuth, requireRoles("admin"), async (req, res) => {
     const data = await loadData();
     const entity = req.params.entity;
     const format = String(req.query.format || "csv");

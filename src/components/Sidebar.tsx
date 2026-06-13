@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { 
   BarChart3, 
   Bot,
@@ -29,9 +24,20 @@ import {
   ListTodo,
   PieChart,
   Building2,
+  MoreHorizontal,
+  X
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ViewType } from '../App';
+import { useState } from 'react';
+
+const mainNavItems = [
+  { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' as ViewType },
+  { icon: Calendar, label: 'Agenda', view: 'Agenda' as ViewType },
+  { icon: Users, label: 'Pacientes', view: 'Pacientes' as ViewType },
+  { icon: ClipboardList, label: 'Prontuários', view: 'Prontuários' as ViewType },
+  { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' as ViewType },
+];
 
 function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOnly?: boolean }[] {
   return [
@@ -71,42 +77,141 @@ interface SidebarProps {
 
 export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole }: SidebarProps) {
   const navItems = allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
   return (
-    <aside id="sidebar" className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
-      <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange('Dashboard')}>
-        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-          <Stethoscope className="text-white w-6 h-6" />
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col h-screen sticky top-0 overflow-y-auto">
+        <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange('Dashboard')}>
+          <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
+            <Stethoscope className="text-white w-6 h-6" />
+          </div>
+          <span className="text-xl font-bold text-teal-900 tracking-tight">Consultio Med</span>
         </div>
-        <span className="text-xl font-bold text-blue-900 tracking-tight">Consultio Med</span>
-      </div>
 
-      <div className="px-4 mb-6">
-        <button 
-          onClick={onNewAppointment}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95"
-        >
-          <Plus size={20} />
-          <span>Novo atendimento</span>
-        </button>
-      </div>
+        <div className="px-4 mb-6">
+          <button 
+            onClick={onNewAppointment}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95"
+          >
+            <Plus size={20} />
+            <span>Novo atendimento</span>
+          </button>
+        </div>
 
-      <nav className="flex-1 px-4 space-y-1 pb-10">
-        {navItems.map((item) => (
-          <motion.button
-            key={item.label}
-            onClick={() => onViewChange(item.view)}
-            whileHover={{ x: 4 }}
-            className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
-              activeView === item.view 
-                ? 'text-blue-700 bg-blue-50 font-bold' 
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+        <nav className="flex-1 px-4 space-y-1 pb-10">
+          {navItems.map((item) => (
+            <motion.button
+              key={item.label}
+              onClick={() => onViewChange(item.view)}
+              whileHover={{ x: 4 }}
+              className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
+                activeView === item.view 
+                  ? 'text-teal-700 bg-teal-50 font-bold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              <item.icon size={20} className={activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
+              <span className="text-sm font-medium">{item.label}</span>
+            </motion.button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 safe-area-bottom">
+        <div className="flex items-center justify-around h-16 px-1">
+          {mainNavItems.map((item) => {
+            const isActive = activeView === item.view;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.view}
+                onClick={() => onViewChange(item.view)}
+                className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl transition-colors min-w-0 flex-1 ${
+                  isActive ? 'text-teal-600' : 'text-slate-400'
+                }`}
+              >
+                <Icon size={22} className={isActive ? 'text-teal-600' : ''} />
+                <span className={`text-[9px] font-bold uppercase tracking-tight ${isActive ? 'text-teal-600' : 'text-slate-400'}`}>
+                  {item.label === 'Prontuários' ? 'Pront.' : item.label === 'Mensagens' ? 'Chat' : item.label}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setIsMoreOpen(true)}
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl transition-colors min-w-0 flex-1 ${
+              isMoreOpen || (mainNavItems.every(i => i.view !== activeView) && activeView !== '') ? 'text-teal-600' : 'text-slate-400'
             }`}
           >
-            <item.icon size={20} className={activeView === item.view ? 'text-blue-600' : 'text-slate-400'} />
-            <span className="text-sm font-medium">{item.label}</span>
-          </motion.button>
-        ))}
+            <MoreHorizontal size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tight">Mais</span>
+          </button>
+        </div>
       </nav>
-    </aside>
+
+      {/* More Menu Modal (Mobile) */}
+      <AnimatePresence>
+        {isMoreOpen && (
+          <>
+            <div 
+              className="lg:hidden fixed inset-0 bg-slate-900/40 z-[60]"
+              onClick={() => setIsMoreOpen(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="lg:hidden fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-3xl shadow-2xl max-h-[70vh] overflow-y-auto safe-area-bottom"
+            >
+              <div className="sticky top-0 bg-white pt-4 pb-2 px-6 border-b border-slate-100 flex items-center justify-between z-10">
+                <h3 className="font-bold text-slate-800">Todos os módulos</h3>
+                <button 
+                  onClick={() => setIsMoreOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-4 grid grid-cols-4 gap-2">
+                {navItems.filter(item => !mainNavItems.some(m => m.view === item.view)).map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeView === item.view;
+                  return (
+                    <button
+                      key={item.view}
+                      onClick={() => {
+                        onViewChange(item.view);
+                        setIsMoreOpen(false);
+                      }}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-colors ${
+                        isActive ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Icon size={24} />
+                      <span className="text-[9px] font-bold text-center leading-tight">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {userRole !== 'super_admin' && (
+                <div className="px-4 pb-6 pt-2">
+                  <button
+                    onClick={onNewAppointment}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-bold text-sm shadow-lg transition-all active:scale-95"
+                  >
+                    <Plus size={20} />
+                    <span>Novo Atendimento</span>
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

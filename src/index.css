@@ -47,3 +47,17 @@
 .glass-card {
   @apply bg-white/80 backdrop-blur-xl border border-white/50 shadow-sm hover:shadow-md transition-all duration-300;
 }
+
+/* Safe area for iOS notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}

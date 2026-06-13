@@ -217,7 +217,7 @@ export function AppointmentTable({
         <div></div>
       </div>
 
-      <div className="space-y-4 pb-20">
+      <div className="space-y-3 lg:space-y-4 pb-20 lg:pb-10">
         {filtered.map((apt) => {
           const config = statusConfig[apt.status] || statusConfig.agendado;
           const avatarUrl = getPatientAvatar(apt.patientName);
@@ -225,111 +225,141 @@ export function AppointmentTable({
           return (
             <div 
               key={apt.id} 
-              className={`flex flex-col lg:grid lg:grid-cols-[100px_minmax(200px,2.5fr)_minmax(180px,1.5fr)_minmax(150px,1.5fr)_minmax(150px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(100px,1fr)_120px] items-start lg:items-center gap-4 py-5 px-6 bg-white rounded-[24px] border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group`}
+              className="bg-white rounded-[24px] border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-300 transition-all group overflow-hidden"
             >
-              {/* Time */}
-              <div className="flex lg:flex-col items-center lg:items-start gap-3 lg:gap-0 w-full lg:w-auto">
-                <span className="text-sm font-black text-slate-800">{apt.timeStart}</span>
-                <span className="text-xs font-bold text-slate-400 lg:mt-1">até {apt.timeEnd}</span>
-              </div>
-
-              {/* Patient */}
-              <div className="flex items-center gap-3 w-full">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-slate-100 flex items-center justify-center text-blue-600 font-bold overflow-hidden shrink-0">
-                   {avatarUrl ? (
-                     <img src={avatarUrl} alt={apt.patientName} className="w-full h-full object-cover" />
-                   ) : (
-                     <span>{apt.patientName.charAt(0)}</span>
-                   )}
+              {/* Mobile Card Layout */}
+              <div className="lg:hidden p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 font-bold overflow-hidden shrink-0">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={apt.patientName} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{apt.patientName.charAt(0)}</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{apt.patientName}</span>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">{apt.type}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-slate-800">{apt.timeStart}</span>
+                    <span className="text-[10px] font-bold text-slate-400 block">até {apt.timeEnd}</span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight leading-none">{apt.patientName}</span>
-                  <span className="lg:hidden text-[9px] font-bold text-slate-500 uppercase mt-1">{apt.type}</span>
-                </div>
-              </div>
 
-              {/* Status Selector Dropdown */}
-              <div className="flex lg:items-center relative">
-                {editingStatusId === apt.id ? (
-                  <select 
-                    value={apt.status}
-                    onChange={(e) => {
-                      onUpdateStatus(apt.id, e.target.value as AppointmentStatus);
-                      setEditingStatusId(null);
-                    }}
-                    onBlur={() => setEditingStatusId(null)}
-                    autoFocus
-                    className="text-[10px] font-black border border-slate-200 rounded-xl px-2.5 py-1 bg-white outline-none focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="agendado">AGENDADO</option>
-                    <option value="confirmado">CONFIRMADO</option>
-                    <option value="paciente_no_local">PACIENTE NO LOCAL</option>
-                    <option value="em_atendimento">EM ATENDIMENTO</option>
-                    <option value="atendido">ATENDIDO</option>
-                    <option value="desmarcado">DESMARCADO</option>
-                  </select>
-                ) : (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setEditingStatusId(apt.id)}
+                      className={`px-2.5 py-1 rounded-full ${config.color} font-black text-[9px] uppercase`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${config.bg} inline-block mr-1`} />
+                      {config.label}
+                    </button>
+                    <div className={`p-1 rounded-lg ${apt.paymentStatus === 'paid' ? 'bg-green-50' : apt.paymentStatus === 'pending' ? 'bg-blue-50' : 'bg-rose-50'}`}>
+                      <DollarSign size={14} className={apt.paymentStatus === 'paid' ? 'text-green-600' : apt.paymentStatus === 'pending' ? 'text-blue-600' : 'text-rose-500'} />
+                    </div>
+                  </div>
                   <button 
-                    onClick={() => setEditingStatusId(apt.id)}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-full ${config.color} border-none font-bold text-[9px] uppercase hover:ring-2 hover:ring-blue-100 transition-all`}
-                    title="Clique para alterar o status"
+                    onClick={() => onStartConsultation(apt.id, apt.patientName)}
+                    disabled={apt.status === 'desmarcado' || apt.status === 'atendido'}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider disabled:opacity-30"
                   >
-                    <div className={`w-1.5 h-1.5 rounded-full ${config.bg}`} />
-                    <span className="font-black">{config.label}</span>
+                    {apt.status === 'em_atendimento' ? 'ATENDENDO' : 'ATENDER'}
                   </button>
-                )}
-              </div>
-
-              {/* Procedure */}
-              <div className="hidden lg:flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Procedimento</span>
-                <span className="text-xs font-bold text-slate-700">{apt.type}</span>
-              </div>
-
-              {/* Observations */}
-              <div className="text-xs font-medium text-slate-500 lg:line-clamp-2 italic pr-4">
-                {apt.observations || <span className="text-slate-300">Nenhuma observação</span>}
-              </div>
-
-              {/* Arrival */}
-              <div className="flex lg:block items-center gap-2 lg:gap-0">
-                <span className="lg:hidden text-[9px] font-black text-slate-400 uppercase">Chegada:</span>
-                <span className="text-xs font-bold text-slate-400 font-mono">{apt.arrival || 'N/A'}</span>
-              </div>
-
-              {/* Medical Record Indicator */}
-              <div className="flex lg:block items-center gap-2 lg:gap-0">
-                <span className="lg:hidden text-[9px] font-black text-slate-400 uppercase">Pront.:</span>
-                <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-md ${
-                  apt.recordStatus === 'incluso' ? 'bg-green-50 text-green-600' : 
-                  apt.recordStatus === 'pendente' ? 'bg-amber-50 text-amber-600' : 
-                  'bg-slate-100 text-slate-400'
-                }`}>
-                  {apt.recordStatus === 'incluso' ? 'Incluso' : 
-                   apt.recordStatus === 'pendente' ? 'Pendente' : 
-                   'Desm.'}
-                </span>
-              </div>
-
-              {/* Payment Pill */}
-              <div className="flex items-center gap-4">
-                <div className={`p-1.5 rounded-xl ${apt.paymentStatus === 'paid' ? 'bg-green-50' : apt.paymentStatus === 'pending' ? 'bg-blue-50' : 'bg-rose-50'}`}>
-                  <DollarSign size={16} className={apt.paymentStatus === 'paid' ? 'text-green-600' : apt.paymentStatus === 'pending' ? 'text-blue-600' : 'text-rose-500'} />
                 </div>
               </div>
 
-              {/* Consult button */}
-              <div className="flex justify-end w-full lg:w-auto">
+              {/* Desktop Grid Layout */}
+              <div className="hidden lg:grid lg:grid-cols-[100px_minmax(200px,2.5fr)_minmax(180px,1.5fr)_minmax(150px,1.5fr)_minmax(150px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(100px,1fr)_120px] items-center gap-4 py-5 px-6">
+                <div className="flex flex-col items-start">
+                  <span className="text-sm font-black text-slate-800">{apt.timeStart}</span>
+                  <span className="text-xs font-bold text-slate-400 mt-1">até {apt.timeEnd}</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 font-bold overflow-hidden shrink-0">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt={apt.patientName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{apt.patientName.charAt(0)}</span>
+                    )}
+                  </div>
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-tight">{apt.patientName}</span>
+                </div>
+
+                <div>
+                  {editingStatusId === apt.id ? (
+                    <select 
+                      value={apt.status}
+                      onChange={(e) => {
+                        onUpdateStatus(apt.id, e.target.value as AppointmentStatus);
+                        setEditingStatusId(null);
+                      }}
+                      onBlur={() => setEditingStatusId(null)}
+                      autoFocus
+                      className="text-[10px] font-black border border-slate-200 rounded-xl px-2.5 py-1 bg-white outline-none focus:ring-2 focus:ring-teal-100"
+                    >
+                      <option value="agendado">AGENDADO</option>
+                      <option value="confirmado">CONFIRMADO</option>
+                      <option value="paciente_no_local">PACIENTE NO LOCAL</option>
+                      <option value="em_atendimento">EM ATENDIMENTO</option>
+                      <option value="atendido">ATENDIDO</option>
+                      <option value="desmarcado">DESMARCADO</option>
+                    </select>
+                  ) : (
+                    <button 
+                      onClick={() => setEditingStatusId(apt.id)}
+                      className={`flex items-center gap-2 px-3 py-1 rounded-full ${config.color} font-bold text-[9px] uppercase hover:ring-2 hover:ring-teal-100 transition-all`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${config.bg}`} />
+                      <span className="font-black">{config.label}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Procedimento</span>
+                  <span className="text-xs font-bold text-slate-700">{apt.type}</span>
+                </div>
+
+                <div className="text-xs font-medium text-slate-500 line-clamp-2 italic pr-4">
+                  {apt.observations || <span className="text-slate-300">Nenhuma observação</span>}
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-slate-400 font-mono">{apt.arrival || 'N/A'}</span>
+                </div>
+
+                <div>
+                  <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-md ${
+                    apt.recordStatus === 'incluso' ? 'bg-green-50 text-green-600' : 
+                    apt.recordStatus === 'pendente' ? 'bg-amber-50 text-amber-600' : 
+                    'bg-slate-100 text-slate-400'
+                  }`}>
+                    {apt.recordStatus === 'incluso' ? 'Incluso' : 
+                     apt.recordStatus === 'pendente' ? 'Pendente' : 
+                     'Desm.'}
+                  </span>
+                </div>
+
+                <div>
+                  <div className={`p-1.5 rounded-xl ${apt.paymentStatus === 'paid' ? 'bg-green-50' : apt.paymentStatus === 'pending' ? 'bg-blue-50' : 'bg-rose-50'}`}>
+                    <DollarSign size={16} className={apt.paymentStatus === 'paid' ? 'text-green-600' : apt.paymentStatus === 'pending' ? 'text-blue-600' : 'text-rose-500'} />
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => onStartConsultation(apt.id, apt.patientName)}
                   disabled={apt.status === 'desmarcado' || apt.status === 'atendido'}
-                  className={`flex items-center justify-between w-full lg:w-[120px] px-4 py-3 md:py-2.5 bg-blue-600 text-white rounded-xl shadow-sm hover:shadow-md hover:bg-blue-700 transition-all text-[11px] font-black uppercase tracking-wider disabled:opacity-20 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none`}
+                  className="flex items-center justify-between w-[120px] px-4 py-2.5 bg-teal-600 text-white rounded-xl shadow-sm hover:shadow-md hover:bg-teal-700 transition-all text-[11px] font-black uppercase tracking-wider disabled:opacity-20"
                 >
                   <span>{apt.status === 'em_atendimento' ? 'ATENDENDO' : 'ATENDER'}</span>
                   <ArrowRight size={14} />
                 </button>
               </div>
-
             </div>
           );
         })}
