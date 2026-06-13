@@ -34,16 +34,16 @@
                       │ consultio-  │  Porta 5173 (interno)
                       │   med       │  React + Express + TypeScript
                       │  (Node.js)  │
-                      └──────┬──────┘
-                      ┌──────┴──────┐
-                      │  whatsmeow- │  Porta 8080 (interno)
-                      │   bridge    │  Go + whatsmeow library
-                      │   (Go)      │
-                      └──────┬──────┘
-                      ┌──────┴──────┐
-                      │  PostgreSQL │  Porta 5432 (interno)
-                      │   (opt)     │  Opcional (ou usar Supabase)
-                      └─────────────┘
+                      └──┬───────┬──┘
+                      ┌──┴──┐ ┌──┴──────────┐
+                      │     │ │  whatsmeow- │  Porta 8080 (interno)
+                      │     │ │   bridge    │  Go + whatsmeow library
+                      │     │ │   (Go)      │
+                      │     │ └─────────────┘
+                      │  ┌──┴──────────────┐
+                      │  │   Supabase      │  PostgreSQL gerenciado
+                      │  │  (externo)      │  (pooler.supabase.com)
+                      │  └─────────────────┘
 ```
 
 ## 2. Deploy Local (Docker Compose)
@@ -128,18 +128,17 @@ Envie o codigo para um repositorio Git (GitHub, GitLab, etc.).
    - **Name**: `consultio-med`
    - **Build method**: `Git Repository`
    - **Repository URL**: URL do seu repositorio
-   - **Repository reference**: `refs/heads/main` (ou sua branch)
+   - **Repository reference**: `refs/heads/codex/beta-test-hardening` (ou sua branch)
    - **Compose path**: `deploy/portainer-stack.yml`
-4. Em **Environment variables**, clique em **Load variables from .env file** e cole o conteudo de `deploy/portainer.env.example`
-5. Preencha todas as variaveis:
-   - **JWT_SECRET**: `openssl rand -base64 32`
-   - **ENCRYPTION_MASTER_KEY**: `openssl rand -hex 32`
-   - **DB_PASSWORD**: senha forte para o banco
-   - **DB_DATABASE_URL**: se usar Supabase, a string de conexao
-   - **APP_DOMAIN**: `https://app.seudominio.com.br`
-   - **ACME_EMAIL**: seu email para Let's Encrypt
-   - **WHATSMEOW_WEBHOOK_SECRET**: `openssl rand -hex 32`
-6. Clique em **Deploy the stack**
+4. As variaveis de ambiente ja estao preenchidas com valores default no proprio YAML. Para sobrescrever, va em **Environment variables** e adicione somente as que deseja alterar.
+5. Para deploy com dominio real, configure:
+   - **APP_DOMAIN**: `https://woomed.consultio.com.br`
+   - **ACME_EMAIL**: `admin@consultio.com.br`
+6. **IMPORTANTE**: A stack usa a rede externa `woopanel1`. Crie-a antes se nao existir:
+   ```bash
+   docker network create woopanel1
+   ```
+7. Clique em **Deploy the stack**
 
 #### 3.3 Configurar DNS
 

@@ -1,158 +1,96 @@
-# ============================================================
-# Consultio Med - Portainer Stack (Docker Compose v3.8+)
-# ============================================================
-# Uso no Portainer:
-#   1. Stacks > Add stack > Name: consultio-med
-#   2. Build method: Git Repository
-#   3. Repository URL: https://github.com/fluowai/woomed
-#   4. Branch: codex/beta-test-hardening
-#   5. Stack file path: deploy/portainer-stack.yml
-#   6. Envs: cole o conteudo de deploy/portainer.env.example
-#
-# Uso no Docker Desktop:
-#   docker compose -f deploy/portainer-stack.yml --env-file deploy/portainer.env.example up -d
-# ============================================================
+version: "3.8"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: consultio-postgres
-    restart: unless-stopped
+  frontend:
+    image: ghcr.io/fluowai/consultio-frontend:latest
     environment:
-      POSTGRES_DB: consultio
-      POSTGRES_USER: consultio
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      VITE_API_URL: "same-origin"
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
     networks:
-      - consultio-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U consultio -d consultio"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.consultio_frontend.rule=Host(`woomed.consultio.com.br`)"
+        - "traefik.http.routers.consultio_frontend.entrypoints=websecure"
+        - "traefik.http.routers.consultio_frontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.consultio_frontend.priority=1"
+        - "traefik.http.routers.consultio_frontend.service=consultio_frontend"
+        - "traefik.http.services.consultio_frontend.loadbalancer.server.port=80"
 
-  whatsmeow-bridge:
-    build:
-      context: ./whatsmeow-bridge
-      dockerfile: Dockerfile
-    container_name: consultio-whatsmeow
-    restart: unless-stopped
-    environment:
-      PORT: 8080
-      WHATSMEOW_DATA_DIR: /app/data
-      APP_WEBHOOK_URL: http://consultio-med:5173/api/whatsapp/webhook
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET}
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-    volumes:
-      - whatsmeow_data:/app/data
-    networks:
-      - consultio-net
-    depends_on:
-      consultio-med:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  consultio-med:
-    build:
-      context: ./
-      dockerfile: Dockerfile
-    container_name: consultio-med
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+  api:
+    image: ghcr.io/fluowai/consultio-api:latest
     environment:
       NODE_ENV: production
       PORT: 5173
-      APP_URL: ${APP_URL:-http://localhost:5173}
-      DATABASE_URL: postgresql://consultio:${DB_PASSWORD}@postgres:5432/consultio
-      JWT_SECRET: ${JWT_SECRET}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
-      WHATSMEOW_API_URL: http://whatsmeow-bridge:8080
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
-      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
-      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
+      CORS_ORIGIN: "https://woomed.consultio.com.br"
+
+      JWT_SECRET: "bhj47BqUl6kamMPlO1lTR8gEiiKJNgD8m7acHGwJGwXkS1ywp63fq6pLMEWiCQDwmeB44AId/a4mA+HyJn/J6g=="
+      ENCRYPTION_MASTER_KEY: "7cbe5fe2092b2bf6b4dab111be5053e838e18ae7b7525d8afabed7d556160c9e"
+
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
+      SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      DATABASE_URL: "postgresql://postgres.fmhmmayrlsgdmxabosou:XJfbFSNB2rXf73TO@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+      PGSSLMODE: require
+
+      WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
+      WHATSMEOW_API_TOKEN: ""
+      WHATSMEOW_WEBHOOK_SECRET: "9xwb/LUenm7sYIEby+Y+j4eoNZIwN0fS"
+
+      GEMINI_API_KEY: ""
+
+      PLATFORM_OWNER_EMAIL: "admin@consultio.com.br"
     volumes:
-      - consultio_med_data:/app/data
+      - consultio_data:/app/data
       - consultio_uploads:/app/uploads
     networks:
-      - consultio-net
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.consultio_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.consultio_api.entrypoints=websecure"
+        - "traefik.http.routers.consultio_api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.consultio_api.priority=10"
+        - "traefik.http.routers.consultio_api.service=consultio_api"
+        - "traefik.http.services.consultio_api.loadbalancer.server.port=5173"
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: consultio-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
+  whatsmeow-bridge:
+    image: ghcr.io/fluowai/consultio-whatsmeow:latest
     environment:
-      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:5173}
-      ACME_EMAIL: ${ACME_EMAIL:-admin@consultio.local}
+      PORT: 8080
+      WHATSMEOW_DATA_DIR: /app/data
+      APP_WEBHOOK_URL: http://api:5173/api/whatsapp/webhook
+      WHATSMEOW_WEBHOOK_SECRET: "9xwb/LUenm7sYIEby+Y+j4eoNZIwN0fS"
+      WHATSMEOW_API_TOKEN: ""
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - whatsmeow_data:/app/data
     networks:
-      - consultio-net
-    depends_on:
-      consultio-med:
-        condition: service_healthy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  consultio-net:
-    name: woopanel1
-    external: true
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
 
 volumes:
-  postgres_data:
-    name: consultio_postgres_data
-  consultio_med_data:
-    name: consultio_med_data
+  consultio_data:
   consultio_uploads:
-    name: consultio_uploads
   whatsmeow_data:
-    name: consultio_whatsmeow_data
-  caddy_data:
-    name: consultio_caddy_data
-  caddy_config:
-    name: consultio_caddy_config
+
+networks:
+  woopanel1:
+    external: true
+  consultio_internal:
+    driver: overlay
