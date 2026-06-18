@@ -3,7 +3,7 @@ import { Express } from "express";
 import { loadData, saveData } from "../data";
 import { AuthedRequest, sessions, requireAuth, requireRoles } from "../middleware";
 import { audit } from "../helpers";
-import { hashPassword, verifyPassword, generateTokens, verifyToken, verifyRefreshToken, generateMFASecret, verifyMFAToken } from "../auth";
+import { hashPassword, verifyPassword, validatePassword, generateTokens, rotateRefreshToken, verifyToken, verifyRefreshToken, generateMFASecret, verifyMFAToken } from "../auth";
 import { createUser, updateUser, deleteUser, listUsers, generateInvite } from "../users";
 import { registerConsent, getPatientConsents } from "../lgpd";
 import { createBackup, listBackups, restoreBackup, scheduleAutoBackup } from "../backup";
@@ -87,16 +87,7 @@ export function registerPhase1Routes(app: Express) {
     const dbRow = await findUserByEmail(email);
 
     if (!dbRow || !((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
-      if (process.env.ENABLE_LEGACY_PIN_LOGIN !== "true" && process.env.NODE_ENV === "production") {
-        return res.status(401).json({ error: "Email ou senha invalidos." });
-      }
-      const pinUser = data.users.find(u => u.pin === password && (u.email?.toLowerCase() === email.toLowerCase() || u.name.toLowerCase() === email.toLowerCase()));
-      if (!pinUser) return res.status(401).json({ error: "Email ou senha invalidos." });
-      const appUser = { id: pinUser.id, name: pinUser.name, role: pinUser.role, specialty: pinUser.specialty };
-      const token = randomUUID();
-      sessions.set(token, appUser);
-      await audit(data, appUser, "login", "session", token, "Login PIN (legacy)");
-      return res.json({ token, user: appUser, legacy: true });
+      return res.status(401).json({ error: "Email ou senha invalidos." });
     }
 
     const passwordHash = (dbRow as any).password_hash || (dbRow as any).passwordHash;
@@ -136,12 +127,15 @@ export function registerPhase1Routes(app: Express) {
   app.post("/api/v2/auth/refresh", async (req, res) => {
     const { refreshToken } = req.body || {};
     if (!refreshToken) return res.status(400).json({ error: "Refresh token obrigatorio." });
+    const newRefreshToken = rotateRefreshToken(refreshToken);
+    if (!newRefreshToken) return res.status(401).json({ error: "Refresh token invalido ou ja utilizado." });
     const payload = verifyRefreshToken(refreshToken);
     if (!payload) return res.status(401).json({ error: "Refresh token invalido." });
     const dbRow = await findUserById(payload.id);
     if (!dbRow) return res.status(401).json({ error: "Usuario nao encontrado." });
     const appUser = dbUserToApp(dbRow);
     const tokens = generateTokens(appUser);
+    tokens.refreshToken = newRefreshToken;
     res.json(tokens);
   });
 
@@ -169,7 +163,8 @@ export function registerPhase1Routes(app: Express) {
   app.post("/api/v2/auth/change-password", requireAuth, async (req: AuthedRequest, res) => {
     const { currentPassword, newPassword } = req.body || {};
     if (!currentPassword || !newPassword) return res.status(400).json({ error: "Senha atual e nova senha obrigatorias." });
-    if (newPassword.length < 6) return res.status(400).json({ error: "Nova senha deve ter pelo menos 6 caracteres." });
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) return res.status(400).json({ error: passwordError });
     const data = await loadData();
     const dbRow = await findUserById(req.user!.id);
     if (!dbRow) return res.status(404).json({ error: "Usuario nao encontrado." });
@@ -260,7 +255,7 @@ export function registerPhase1Routes(app: Express) {
     res.json(req.user);
   });
 
-  app.get("/api/auth/users", async (_req, res) => {
+  app.get("/api/auth/users", requireAuth, requireRoles("admin"), async (_req, res) => {
     const data = await loadData();
     res.json(data.users.map(u => ({ id: u.id, name: u.name, role: u.role, specialty: u.specialty })));
   });

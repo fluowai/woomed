@@ -28,10 +28,13 @@ import {
   TissModule
 } from './components/ExpansionModules';
 import { AgentPipelineDashboard, SdrPipeline, AgentConversations, AgentMetricsView } from './components/AgentModules';
-import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles } from 'lucide-react';
+import CrmModule from './components/CrmModule';
+import NpsLgpdModule from './components/NpsLgpdModule';
+import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles, LayoutDashboard, TrendingUp, Smartphone, Bot, Users, DollarSign, Megaphone, FileText, Package, BarChart3, ClipboardList, UsersRound, HelpCircle } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, BootstrapState } from './api';
 import { ToastProvider, ToastListener, showToast } from './components/Toast';
+import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import {
   AccountsPayable,
   AppUser,
@@ -60,7 +63,13 @@ import {
   ScheduleBlock,
   WaitingListEntry,
   Tenant,
-  SaaSPlan
+  SaaSPlan,
+  CrmLead, CrmPipeline, CrmOpportunity, CrmTask, CrmInteraction, LeadSource,
+  NpsSurvey, NpsResponse,
+  AutomationTemplate, AutomationReminder,
+  LgpdConsentTemplate, LgpdPatientConsent, LgpdDataSubjectRequest, LgpdSensitiveAccessLog,
+  ProfessionalUnit, ProfessionalRoom,
+  PatientPortalLogin, PatientSatisfactionRating
 } from './types';
 import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_KNOWLEDGE } from './aiCatalog';
 
@@ -77,7 +86,7 @@ export default function App() {
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
-  // Dynamic States for 100% Functional CRUD
+  // Dynamic States
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -103,6 +112,24 @@ export default function App() {
   const [paymentGatewayConfig, setPaymentGatewayConfig] = useState<PaymentGatewayConfig[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
+  const [crmLeads, setCrmLeads] = useState<CrmLead[]>([]);
+  const [crmPipelines, setCrmPipelines] = useState<CrmPipeline[]>([]);
+  const [crmOpportunities, setCrmOpportunities] = useState<CrmOpportunity[]>([]);
+  const [crmTasks, setCrmTasks] = useState<CrmTask[]>([]);
+  const [crmInteractions, setCrmInteractions] = useState<CrmInteraction[]>([]);
+  const [leadSources, setLeadSources] = useState<LeadSource[]>([]);
+  const [npsSurveys, setNpsSurveys] = useState<NpsSurvey[]>([]);
+  const [npsResponses, setNpsResponses] = useState<NpsResponse[]>([]);
+  const [automationTemplates, setAutomationTemplates] = useState<AutomationTemplate[]>([]);
+  const [automationReminders, setAutomationReminders] = useState<AutomationReminder[]>([]);
+  const [lgpdConsentTemplates, setLgpdConsentTemplates] = useState<LgpdConsentTemplate[]>([]);
+  const [lgpdPatientConsents, setLgpdPatientConsents] = useState<LgpdPatientConsent[]>([]);
+  const [lgpdDataSubjectRequests, setLgpdDataSubjectRequests] = useState<LgpdDataSubjectRequest[]>([]);
+  const [lgpdSensitiveAccessLogs, setLgpdSensitiveAccessLogs] = useState<LgpdSensitiveAccessLog[]>([]);
+  const [professionalUnits, setProfessionalUnits] = useState<ProfessionalUnit[]>([]);
+  const [professionalRooms, setProfessionalRooms] = useState<ProfessionalRoom[]>([]);
+  const [patientPortalLogins, setPatientPortalLogins] = useState<PatientPortalLogin[]>([]);
+  const [patientSatisfactionRatings, setPatientSatisfactionRatings] = useState<PatientSatisfactionRating[]>([]);
   const [currentDate, setCurrentDate] = useState<string>(() => todayDate());
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
   const [agendaSearch, setAgendaSearch] = useState<string>('');
@@ -148,6 +175,24 @@ export default function App() {
     setPaymentGatewayConfig(state.paymentGatewayConfig || []);
     setTenants(state.tenants || []);
     setPlans(state.plans || []);
+    setCrmLeads(state.crmLeads || []);
+    setCrmPipelines(state.crmPipelines || []);
+    setCrmOpportunities(state.crmOpportunities || []);
+    setCrmTasks(state.crmTasks || []);
+    setCrmInteractions(state.crmInteractions || []);
+    setLeadSources(state.leadSources || []);
+    setNpsSurveys(state.npsSurveys || []);
+    setNpsResponses(state.npsResponses || []);
+    setAutomationTemplates(state.automationTemplates || []);
+    setAutomationReminders(state.automationReminders || []);
+    setLgpdConsentTemplates(state.lgpdConsentTemplates || []);
+    setLgpdPatientConsents(state.lgpdPatientConsents || []);
+    setLgpdDataSubjectRequests(state.lgpdDataSubjectRequests || []);
+    setLgpdSensitiveAccessLogs(state.lgpdSensitiveAccessLogs || []);
+    setProfessionalUnits(state.professionalUnits || []);
+    setProfessionalRooms(state.professionalRooms || []);
+    setPatientPortalLogins(state.patientPortalLogins || []);
+    setPatientSatisfactionRatings(state.patientSatisfactionRatings || []);
   };
 
   useEffect(() => {
@@ -794,6 +839,10 @@ export default function App() {
         );
       case 'Referências':
         return <ReferencesModule references={references} onCreateReference={handleCreateReference} />;
+      case 'CRM 360':
+        return <CrmModule token={authToken} userRole={currentUser?.role || ''} />;
+      case 'NPS & LGPD':
+        return <NpsLgpdModule token={authToken} userRole={currentUser?.role || ''} />;
       case 'Ajuda':
         return (
           <HelpModule
@@ -841,23 +890,72 @@ export default function App() {
   return (
     <ToastProvider>
       <ToastListener />
+      <PwaInstallPrompt />
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
-      {/* Sidebar Overlay for Mobile */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      <div className={`fixed inset-y-0 left-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out`}>
-        <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
-          setActiveView(view);
-          setIsSidebarOpen(false);
-        }} userRole={currentUser?.role} />
-      </div>
+      <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
+        setActiveView(view);
+        setIsSidebarOpen(false);
+      }} userRole={currentUser?.role} />
       
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      {/* Mobile sidebar overlay */}
+      {isSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+          <div className="relative w-72 bg-white h-full shadow-2xl overflow-y-auto p-4 animate-slide-up">
+            <div className="flex items-center gap-3 p-2 mb-4" onClick={() => { setActiveView('Dashboard'); setIsSidebarOpen(false); }}>
+              <div className="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center">
+                <Stethoscope className="text-white w-5 h-5" />
+              </div>
+              <span className="text-lg font-bold text-teal-900 tracking-tight">Consultio Med</span>
+            </div>
+            <div className="space-y-1">
+              {[
+                { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' as ViewType },
+                { icon: Calendar, label: 'Agenda', view: 'Agenda' as ViewType },
+                { icon: TrendingUp, label: 'CRM 360', view: 'CRM 360' as ViewType },
+                { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' as ViewType },
+                { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' as ViewType },
+                { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' as ViewType },
+                { icon: Calendar, label: 'Prontuários', view: 'Prontuários' as ViewType },
+                { icon: Users, label: 'Pacientes', view: 'Pacientes' as ViewType },
+                { icon: DollarSign, label: 'Financeiro', view: 'Financeiro' as ViewType },
+                { icon: Megaphone, label: 'Marketing', view: 'Marketing' as ViewType },
+                { icon: FileText, label: 'TISS', view: 'TISS' as ViewType },
+                { icon: Package, label: 'Estoques', view: 'Estoques' as ViewType },
+                { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' as ViewType },
+                { icon: ClipboardList, label: 'NPS & LGPD', view: 'NPS & LGPD' as ViewType },
+                { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' as ViewType },
+                { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' as ViewType },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = activeView === item.view;
+                return (
+                  <button
+                    key={item.view}
+                    onClick={() => {
+                      setActiveView(item.view);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
+                      isActive
+                        ? 'text-teal-700 bg-teal-50 font-bold'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    }`}
+                  >
+                    <Icon size={20} className={isActive ? 'text-teal-600' : 'text-slate-400'} />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
         <Header 
           onMenuClick={() => setIsSidebarOpen(true)} 
           activeView={activeView}
@@ -871,10 +969,10 @@ export default function App() {
 
         {/* Floating Action Buttons */}
         {!['Mensagens', 'Conexoes', 'Assistente IA', 'Conversas Agentes'].includes(activeView) && (
-          <div className="fixed bottom-6 right-6 md:bottom-10 md:right-10 flex flex-col gap-4 z-30">
+          <div className="fixed bottom-20 right-4 md:bottom-10 md:right-10 flex flex-col gap-3 z-30 lg:bottom-10">
             <button 
               onClick={() => setIsSchedulingOpen(true)}
-              className="w-14 h-14 md:w-16 md:h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
+              className="w-14 h-14 md:w-16 md:h-16 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl shadow-xl shadow-teal-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
               title="Novo Agendamento"
             >
               <Plus size={28} className="group-hover:rotate-90 transition-transform" />
@@ -894,12 +992,16 @@ export default function App() {
         {isSchedulingOpen && (
           <div 
             onClick={() => setIsSchedulingOpen(false)}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto"
           >
             <div 
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden border border-slate-100"
+              className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-[40px] shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] lg:max-h-none flex flex-col"
             >
+              {/* Drag handle for mobile */}
+              <div className="lg:hidden flex justify-center pt-2 pb-0 -mb-1">
+                <div className="w-10 h-1.5 rounded-full bg-slate-300" />
+              </div>
               <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white">
@@ -918,8 +1020,8 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="p-8 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="p-4 lg:p-8 space-y-6 lg:space-y-8 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
                   <div className="space-y-6">
                     {/* Patient selection */}
                     <div className="flex flex-col gap-2">
@@ -1057,17 +1159,17 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 pt-6">
+              </div>
+                <div className="p-4 lg:p-8 border-t border-slate-100 bg-white">
                   <button 
                     type="button"
                     onClick={handleAddAppointment}
                     disabled={!selectedPatientId || !selectedDoctorId || !selectedDate || !selectedTime || hasConflict}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl py-5 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
+                    className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl py-5 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-teal-100"
                   >
                     {hasConflict ? 'Horário Indisponível' : 'Finalizar Agendamento'}
                   </button>
                 </div>
-              </div>
             </div>
           </div>
         )}

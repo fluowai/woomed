@@ -195,19 +195,14 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   app.post("/api/whatsapp/webhook", async (req, res) => {
     const { WHATSMEOW_WEBHOOK_SECRET } = await import("../config");
     
-    // CRÍTICO: Validar secret em produção
+    // CRÍTICO: Validar secret em TODOS os ambientes
     const headerSecret = req.header("x-whatsmeow-secret") || "";
-    if (process.env.NODE_ENV === "production") {
-      if (!WHATSMEOW_WEBHOOK_SECRET) {
-        console.error("[SECURITY] Webhook recebido mas WHATSMEOW_WEBHOOK_SECRET não configurado em produção");
-        return res.status(500).json({ error: "Webhook inválido: secret não configurado" });
-      }
-      if (headerSecret !== WHATSMEOW_WEBHOOK_SECRET) {
-        console.error(`[SECURITY] Webhook rejection: secret mismatch from ${req.ip}`);
-        return res.status(401).json({ error: "Webhook não autorizado: secret inválido" });
-      }
-    } else if (WHATSMEOW_WEBHOOK_SECRET && headerSecret !== WHATSMEOW_WEBHOOK_SECRET) {
-      // Mesmo em dev, valida se secret foi configurado
+    if (!WHATSMEOW_WEBHOOK_SECRET) {
+      console.error("[SECURITY] Webhook recebido mas WHATSMEOW_WEBHOOK_SECRET não configurado");
+      return res.status(500).json({ error: "Webhook inválido: secret não configurado no servidor" });
+    }
+    if (headerSecret !== WHATSMEOW_WEBHOOK_SECRET) {
+      console.error(`[SECURITY] Webhook rejection: secret mismatch from ${req.ip}`);
       return res.status(401).json({ error: "Webhook não autorizado: secret inválido" });
     }
     const data = await loadData();

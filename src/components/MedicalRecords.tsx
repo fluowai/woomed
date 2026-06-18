@@ -132,13 +132,13 @@ export default function MedicalRecords({
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       {!activePatientId ? (
-        <div className="p-8 h-full overflow-y-auto">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-800">Prontuários Eletrônicos</h2>
-            <p className="text-sm text-slate-500 font-medium">Selecione um paciente para visualizar seu histórico médico completo.</p>
+        <div className="p-4 lg:p-8 h-full overflow-y-auto pb-20">
+          <div className="mb-4 lg:mb-8">
+            <h2 className="text-lg lg:text-2xl font-bold text-slate-800">Prontuários</h2>
+            <p className="hidden lg:block text-sm text-slate-500 font-medium">Selecione um paciente para visualizar seu histórico médico completo.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-6 pb-20">
             {patients.map((patient) => (
               <div 
                 key={patient.id}
@@ -166,44 +166,44 @@ export default function MedicalRecords({
       ) : (
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Record Toolbar */}
-          <div className="px-8 py-4 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm z-10">
-            <div className="flex items-center gap-4">
+          <div className="px-4 lg:px-8 py-3 lg:py-4 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm z-10">
+            <div className="flex items-center gap-2 lg:gap-4 min-w-0">
               <button 
                 onClick={() => onActivePatientIdChange(null)}
-                className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                className="p-1.5 lg:p-2 text-slate-400 hover:text-teal-600 transition-colors"
                 title="Voltar para a lista"
               >
-                <ChevronRight size={24} className="rotate-180" />
+                <ChevronRight size={20} className="rotate-180" />
               </button>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-100 border border-slate-200 flex items-center justify-center text-blue-700 font-black overflow-hidden shrink-0">
+              <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-2xl bg-teal-100 flex items-center justify-center text-teal-700 font-black overflow-hidden shrink-0">
                   {selectedPatient?.avatarUrl ? (
                     <img src={selectedPatient.avatarUrl} alt={selectedPatient.fullName} className="w-full h-full object-cover" />
                   ) : (
-                    <span>{selectedPatient?.fullName.charAt(0)}</span>
+                    <span className="text-sm">{selectedPatient?.fullName.charAt(0)}</span>
                   )}
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900">{selectedPatient?.fullName}</h3>
-                  <span className="text-xs text-slate-400 font-medium tracking-tight">CPF: {selectedPatient?.cpf}</span>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 text-sm lg:text-base truncate">{selectedPatient?.fullName}</h3>
+                  <span className="text-[10px] lg:text-xs text-slate-400 font-medium">CPF: {selectedPatient?.cpf}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 lg:gap-3 shrink-0">
               <button 
                 onClick={() => setIsEvolutionOpen(true)}
-                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-full font-bold text-xs uppercase tracking-widest shadow-md hover:bg-blue-700 transition-all"
+                className="flex items-center gap-1 lg:gap-2 px-3 lg:px-6 py-2 lg:py-2.5 bg-teal-600 text-white rounded-full font-bold text-[10px] lg:text-xs uppercase tracking-widest shadow-md hover:bg-teal-700 transition-all"
               >
-                <Plus size={16} />
-                <span>Nova Evolução</span>
+                <Plus size={14} className="lg:size-4" />
+                <span className="hidden lg:inline">Nova Evolução</span>
               </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
             {/* Left Column: Fixed Info */}
-            <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white overflow-y-auto p-6 space-y-8 shrink-0">
+            <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white overflow-y-auto p-4 lg:p-6 space-y-6 lg:space-y-8 shrink-0">
               
               {/* Dynamic Metadata Card */}
               <div className="flex items-center justify-between mb-4">
@@ -461,19 +461,19 @@ export default function MedicalRecords({
 
       {/* New Evolution Modal Form */}
       {isEvolutionOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto">
           <form 
             onSubmit={handleEvolutionSubmit}
-            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100"
+            className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-[32px] shadow-2xl overflow-hidden border border-slate-100 max-h-[92vh] flex flex-col"
           >
-            <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 lg:p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white">
                   <ClipboardCheck size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 tracking-tight">Nova Evolução Clínica</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Histórico clínico de {selectedPatient?.fullName}</p>
+                  <h3 className="font-black text-slate-800 tracking-tight text-sm lg:text-base">Nova Evolução</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{selectedPatient?.fullName}</p>
                 </div>
               </div>
               <button 
@@ -485,8 +485,8 @@ export default function MedicalRecords({
               </button>
             </div>
             
-            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 lg:p-8 space-y-5 lg:space-y-6 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
                 
                 {/* Doctor Selection */}
                 <div className="flex flex-col gap-2">
@@ -538,18 +538,17 @@ export default function MedicalRecords({
                 </div>
               </div>
             </div>
-
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4">
+            <div className="p-4 lg:p-6 bg-slate-50 border-t border-slate-100 flex gap-3 lg:gap-4">
               <button 
                 type="submit"
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-100"
+                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-teal-100"
               >
                 Salvar Evolução
               </button>
               <button 
                 type="button"
                 onClick={() => setIsEvolutionOpen(false)}
-                className="px-8 bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
+                className="px-6 lg:px-8 bg-white border border-slate-200 text-slate-600 rounded-2xl py-4 font-bold hover:bg-slate-50 transition-all text-xs uppercase"
               >
                 Cancelar
               </button>
@@ -572,15 +571,15 @@ interface EntryModalProps {
 
 function EntryModal({ entry, onClose }: EntryModalProps) {
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end lg:items-center justify-center p-0 lg:p-4">
+      <div className="bg-white w-full lg:max-w-2xl rounded-t-[32px] lg:rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+        <div className="p-4 lg:p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
+            <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center text-teal-700">
               <ClipboardCheck size={24} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">Detalhes da Consulta</h3>
+              <h3 className="font-bold text-slate-900 text-sm lg:text-base">Detalhes da Consulta</h3>
               <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                 <span>{entry.doctorName}</span>
                 <span className="w-1 h-1 rounded-full bg-slate-300" />
@@ -596,7 +595,7 @@ function EntryModal({ entry, onClose }: EntryModalProps) {
           </button>
         </div>
         
-        <div className="p-8 overflow-y-auto space-y-8">
+        <div className="p-4 lg:p-8 overflow-y-auto space-y-6 lg:space-y-8 flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <section>
@@ -636,10 +635,10 @@ function EntryModal({ entry, onClose }: EntryModalProps) {
           </div>
         </div>
 
-        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <div className="p-4 lg:p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
           <button 
             onClick={onClose}
-            className="px-8 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-full font-bold text-xs uppercase tracking-widest hover:bg-slate-100 transition-all shadow-sm"
+            className="w-full lg:w-auto px-8 py-3 lg:py-2.5 bg-white border border-slate-200 text-slate-600 rounded-full font-bold text-xs uppercase tracking-widest hover:bg-slate-100 transition-all shadow-sm"
           >
             Fechar
           </button>

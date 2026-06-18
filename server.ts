@@ -13,6 +13,8 @@ import { registerPhase1Routes } from "./server/routes/phase1";
 import { registerPhase2Routes } from "./server/routes/phase2";
 import { registerAgentRoutes } from "./server/routes/agents-v2";
 import { registerSaaSRoutes } from "./server/routes/saas";
+import { registerCrmRoutes } from "./server/routes/crm";
+import { registerModules360Routes } from "./server/routes/modules-360";
 import { scheduleAutoBackup } from "./server/backup";
 import { startBridge, stopBridge } from "./server/whatsmeow-bridge-manager";
 
@@ -38,7 +40,24 @@ async function startServer() {
     allowedHeaders: ["Content-Type", "Authorization", "x-session-token"],
     credentials: true
   }));
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://*.supabase.co"],
+        connectSrc: ["'self'", "ws:", "wss:", "https://*.supabase.co", "https://api.openai.com", "https://api.anthropic.com", "https://api.groq.com", "https://generativelanguage.googleapis.com"],
+        fontSrc: ["'self'", "data:"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'self'"],
+        upgradeInsecureRequests: []
+      }
+    },
+    crossOriginEmbedderPolicy: false
+  }));
   app.use(express.json({ limit: "10mb" }));
 
   // Request logger
@@ -56,6 +75,9 @@ async function startServer() {
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "Muitas tentativas de login. Tente novamente em 15 minutos." }, standardHeaders: true, legacyHeaders: false });
   app.use("/api/auth/login", authLimiter);
   app.use("/api/v2/auth/login", authLimiter);
+  const mfaRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: "Muitas tentativas MFA. Tente novamente em 15 minutos." }, standardHeaders: true, legacyHeaders: false });
+  app.use("/api/v2/auth/mfa", mfaRateLimiter);
+  app.use("/api/v2/auth/change-password", mfaRateLimiter);
   const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: "Muitas requisicoes. Tente novamente em 1 minuto." }, standardHeaders: true, legacyHeaders: false });
   app.use("/api/", apiLimiter);
 
@@ -122,6 +144,8 @@ async function startServer() {
   registerPhase2Routes(app);
   registerAgentRoutes(app);
   registerSaaSRoutes(app);
+  registerCrmRoutes(app);
+  registerModules360Routes(app);
 
   // Auto backup
   scheduleAutoBackup().catch(console.error);

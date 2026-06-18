@@ -1,9 +1,33 @@
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
 import { dataDir, dataFile, loadData } from "./data";
+import { getSecret } from "./secrets";
 
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 const MAX_BACKUPS = 30;
+
+function getBackupEncryptionKey(): Buffer {
+  const key = getSecret("ENCRYPTION_MASTER_KEY");
+  return key ? Buffer.from(key, "hex") : crypto.randomBytes(32);
+}
+
+function encryptBuffer(data: Buffer, key: Buffer): Buffer {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, encrypted]);
+}
+
+function decryptBuffer(data: Buffer, key: Buffer): Buffer {
+  const iv = data.subarray(0, 16);
+  const authTag = data.subarray(16, 32);
+  const encrypted = data.subarray(32);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+}
 
 function formatDate(date: Date): string {
   const yyyy = date.getFullYear();
@@ -17,9 +41,12 @@ function formatDate(date: Date): string {
 export async function createBackup(): Promise<string> {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   const data = await loadData();
-  const backupName = `consultio-backup-${formatDate(new Date())}.json`;
+  const encryptionKey = getBackupEncryptionKey();
+  const backupName = `consultio-backup-${formatDate(new Date())}.enc`;
   const backupPath = path.join(BACKUP_DIR, backupName);
-  await fs.writeFile(backupPath, JSON.stringify(data, null, 2), "utf-8");
+  const plaintext = Buffer.from(JSON.stringify(data), "utf-8");
+  const encrypted = encryptBuffer(plaintext, encryptionKey);
+  await fs.writeFile(backupPath, encrypted);
   await cleanOldBackups();
   return backupPath;
 }
@@ -56,9 +83,11 @@ export async function listBackups(): Promise<{ name: string; size: number; date:
 export async function restoreBackup(backupName: string): Promise<boolean> {
   try {
     const backupPath = path.join(BACKUP_DIR, backupName);
-    const raw = await fs.readFile(backupPath, "utf-8");
-    JSON.parse(raw); // Validate JSON
-    await fs.copyFile(backupPath, dataFile);
+    const encryptionKey = getBackupEncryptionKey();
+    const encrypted = await fs.readFile(backupPath);
+    const decrypted = decryptBuffer(encrypted, encryptionKey);
+    JSON.parse(decrypted.toString("utf-8")); // Validate JSON
+    await fs.writeFile(dataFile, decrypted);
     return true;
   } catch {
     return false;

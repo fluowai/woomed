@@ -68,9 +68,9 @@ export default function Login({ onLogin }: LoginProps) {
   const handleSubmit = tab === 'pin' ? handlePinSubmit : handleEmailSubmit;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-[1fr_420px] bg-white border border-slate-200 shadow-2xl rounded-[32px] overflow-hidden">
-        <div className="p-10 md:p-14 bg-blue-700 text-white flex flex-col justify-between min-h-[520px]">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-0 lg:p-6">
+      <div className="w-full lg:max-w-5xl lg:grid lg:grid-cols-[1fr_420px] bg-white lg:border lg:border-slate-200 lg:shadow-2xl lg:rounded-[32px] overflow-hidden min-h-screen lg:min-h-0">
+        <div className="hidden lg:flex p-10 md:p-14 bg-teal-700 text-white flex-col justify-between min-h-[520px]">
           <div>
             <div className="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center mb-8">
               <Stethoscope size={30} />
@@ -97,8 +97,11 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 md:p-10 flex flex-col justify-center">
-          <div className="mb-8">
+        <form onSubmit={handleSubmit} className="p-6 lg:p-10 flex flex-col justify-center min-h-screen lg:min-h-0">
+          <div className="mb-6 lg:mb-8 text-center lg:text-left">
+            <div className="lg:hidden w-14 h-14 bg-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Stethoscope size={30} className="text-white" />
+            </div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Entrar no sistema</h2>
             <p className="text-sm text-slate-500 font-medium mt-1">Use suas credenciais da clinica para continuar.</p>
           </div>

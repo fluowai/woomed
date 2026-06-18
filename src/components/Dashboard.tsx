@@ -58,9 +58,9 @@ export default function Dashboard({
   const awaitingCount = todayAppointments.filter(a => a.status === 'paciente_no_local').length;
 
   return (
-    <div className="p-4 md:p-8 h-full overflow-y-auto bg-slate-50">
+    <div className="p-3 lg:p-8 h-full overflow-y-auto bg-slate-50 pb-20 lg:pb-8">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400 rounded-[32px] p-6 md:p-8 text-white shadow-xl shadow-teal-100 mb-8 relative overflow-hidden group">
+      <div className="bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400 rounded-[24px] lg:rounded-[32px] p-5 lg:p-8 text-white shadow-xl shadow-teal-100 mb-4 lg:mb-8 relative overflow-hidden group">
         <div className="absolute right-0 bottom-0 opacity-10 translate-x-10 translate-y-10 group-hover:scale-110 transition-transform duration-700">
           <Calendar size={300} />
         </div>
@@ -69,8 +69,8 @@ export default function Dashboard({
             <Sparkles size={12} className="animate-pulse" />
             <span>Consultio Med Intellisense</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-black tracking-tight mb-2">Olá, Dr. Matheus!</h2>
-          <p className="text-sm md:text-base text-blue-100/90 font-medium leading-relaxed">
+          <h2 className="text-xl lg:text-3xl font-black tracking-tight mb-1 lg:mb-2">Olá, Dr. Matheus!</h2>
+          <p className="text-xs lg:text-base text-blue-100/90 font-medium leading-relaxed">
             Você tem <strong className="text-white font-bold">{todayAppointments.length} atendimentos</strong> programados para hoje. 
             {awaitingCount > 0 ? ` Há ${awaitingCount} paciente(s) aguardando na recepção neste momento.` : " Tudo pronto para iniciar seus atendimentos!"}
           </p>
@@ -78,7 +78,7 @@ export default function Dashboard({
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 mb-4 lg:mb-8">
         {/* KPI 1 */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
           <div className="space-y-1">
@@ -146,7 +146,7 @@ export default function Dashboard({
       </div>
 
       {/* Main Grid: Realtime Table & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
         {/* Left Side: Today's Appointments Summary */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col">

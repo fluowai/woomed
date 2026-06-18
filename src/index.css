@@ -47,3 +47,50 @@
 .glass-card {
   @apply bg-white/80 backdrop-blur-xl border border-white/50 shadow-sm hover:shadow-md transition-all duration-300;
 }
+
+/* Safe area for iOS notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Touch-friendly tap targets */
+@media (hover: none) and (pointer: coarse) {
+  button, a, select, input[type="button"], input[type="submit"] {
+    min-height: 44px;
+  }
+  
+  .btn-compact {
+    min-height: unset;
+  }
+}
+
+/* iOS momentum scroll */
+.overflow-y-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Disable text selection on UI elements */
+.no-select {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* Prevent zoom on iOS input focus */
+input, select, textarea {
+  font-size: 16px;
+}
+
+/* Bottom tab bar safe area */
+.safe-area-bottom-bar {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}

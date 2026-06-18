@@ -24,7 +24,13 @@ import {
   ServicePrice,
   Tenant,
   TissGuide,
-  WaitingListEntry
+  WaitingListEntry,
+  CrmLead, CrmPipeline, CrmOpportunity, CrmTask, CrmInteraction, LeadSource,
+  NpsSurvey, NpsResponse,
+  AutomationTemplate, AutomationReminder,
+  LgpdConsentTemplate, LgpdPatientConsent, LgpdDataSubjectRequest, LgpdSensitiveAccessLog,
+  ProfessionalUnit, ProfessionalRoom,
+  PatientPortalLogin, PatientSatisfactionRating
 } from './types';
 
 export interface BootstrapState {
@@ -54,6 +60,24 @@ export interface BootstrapState {
   paymentGatewayConfig: PaymentGatewayConfig[];
   tenants?: Tenant[];
   plans?: SaaSPlan[];
+  crmLeads?: CrmLead[];
+  crmPipelines?: CrmPipeline[];
+  crmOpportunities?: CrmOpportunity[];
+  crmTasks?: CrmTask[];
+  crmInteractions?: CrmInteraction[];
+  leadSources?: LeadSource[];
+  npsSurveys?: NpsSurvey[];
+  npsResponses?: NpsResponse[];
+  automationTemplates?: AutomationTemplate[];
+  automationReminders?: AutomationReminder[];
+  lgpdConsentTemplates?: LgpdConsentTemplate[];
+  lgpdPatientConsents?: LgpdPatientConsent[];
+  lgpdDataSubjectRequests?: LgpdDataSubjectRequest[];
+  lgpdSensitiveAccessLogs?: LgpdSensitiveAccessLog[];
+  professionalUnits?: ProfessionalUnit[];
+  professionalRooms?: ProfessionalRoom[];
+  patientPortalLogins?: PatientPortalLogin[];
+  patientSatisfactionRatings?: PatientSatisfactionRating[];
 }
 
 async function request<T>(path: string, token: string | null, init: RequestInit = {}): Promise<T> {

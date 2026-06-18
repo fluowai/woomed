@@ -1,19 +1,14 @@
 import crypto from "crypto";
-
-/**
- * Módulo de criptografia para secrets sensíveis (payment gateway keys, API tokens, etc)
- * Usa AES-256-GCM com derivação de chave PBKDF2
- */
+import { getSecret } from "./secrets";
 
 const MASTER_KEY = (() => {
-  const key = process.env.ENCRYPTION_MASTER_KEY;
+  const key = getSecret("ENCRYPTION_MASTER_KEY");
   if (!key && process.env.NODE_ENV === "production") {
     throw new Error(
       "ERRO CRÍTICO: ENCRYPTION_MASTER_KEY não configurado em produção. " +
       "Gere com: ENCRYPTION_MASTER_KEY=$(openssl rand -hex 32)"
     );
   }
-  // Se não configurado em dev, gera uma chave temporária
   return key ? Buffer.from(key, "hex") : crypto.randomBytes(32);
 })();
 

@@ -68,6 +68,29 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+export function maskCpf(cpf: string): string {
+  if (!cpf || cpf.length < 11) return cpf;
+  return `***.${cpf.slice(3, 6)}.***-${cpf.slice(-2)}`;
+}
+
+export function sanitizeUpdate<T>(body: Record<string, unknown>, allowedFields: (keyof T)[]): Partial<T> {
+  const result: Partial<T> = {};
+  for (const field of allowedFields) {
+    if (body[field as string] !== undefined) {
+      (result as any)[field] = body[field as string];
+    }
+  }
+  return result;
+}
+
+export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+  const result: any = {};
+  for (const key of keys) {
+    if (obj[key] !== undefined) result[key] = obj[key];
+  }
+  return result;
+}
+
 export function getServicePrice(type: string, prices: ServicePrice[]) {
   const normalizedType = normalize(type);
   const match = prices.find(price => {
