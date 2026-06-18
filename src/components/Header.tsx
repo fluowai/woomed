@@ -1,4 +1,4 @@
-import { Sparkles, Bell, LogOut, ChevronDown, Plus } from 'lucide-react';
+import { Sparkles, Bell, LogOut, ChevronDown, Plus, Menu } from 'lucide-react';
 import { AppUser } from '../types';
 
 interface HeaderProps {
@@ -28,6 +28,13 @@ export default function Header({ onMenuClick, activeView, currentDate, onNewAppo
   return (
     <header className="h-14 lg:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-3 lg:px-8 shrink-0 shadow-sm z-20">
       <div className="flex items-center gap-2 lg:gap-6 min-w-0">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 -ml-1 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-colors"
+          title="Abrir menu"
+        >
+          <Menu size={22} />
+        </button>
         <div className="min-w-0">
           <h1 className="text-sm lg:text-xl font-black text-slate-900 uppercase tracking-tight truncate">{activeView}</h1>
           <p className="hidden lg:block text-[10px] text-slate-500 font-bold uppercase tracking-widest">{formatHeaderDate(currentDate)}</p>

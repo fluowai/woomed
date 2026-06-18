@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData, AppData } from "../data";
 import { AuthedRequest, sessions, getToken, requireAuth, requireRoles } from "../middleware";
-import { audit, getServicePrice, isSlotAvailable, buildSuggestions, addMinutes, normalize, nowIso, sanitizeUpdate } from "../helpers";
+import { audit, getServicePrice, isSlotAvailable, buildSuggestions, addMinutes, normalize, nowIso, sanitizeUpdate, maskCpf } from "../helpers";
 import { patientSchema, appointmentSchema, financeTransactionSchema, agentSchema, campaignSchema } from "../schemas";
 import {
   Patient, Appointment, FinanceTransaction, ServiceAgent, MarketingCampaign,
@@ -520,6 +520,24 @@ function buildState(data: AppData, user: { id: string; name: string; role: strin
     accountsPayable: financeRoles.includes(role) ? data.accountsPayable : [],
     paymentGatewayConfig: role === "admin" || role === "super_admin" ? data.paymentGatewayConfig : [],
     tenants: role === "super_admin" ? data.tenants : [],
-    plans: role === "super_admin" ? data.plans : []
+    plans: role === "super_admin" ? data.plans : [],
+    crmLeads: (data as any).crmLeads || [],
+    crmPipelines: (data as any).crmPipelines || [],
+    crmOpportunities: (data as any).crmOpportunities || [],
+    crmTasks: (data as any).crmTasks || [],
+    crmInteractions: (data as any).crmInteractions || [],
+    leadSources: (data as any).leadSources || [],
+    npsSurveys: (data as any).npsSurveys || [],
+    npsResponses: (data as any).npsResponses || [],
+    automationTemplates: (data as any).automationTemplates || [],
+    automationReminders: (data as any).automationReminders || [],
+    lgpdConsentTemplates: (data as any).lgpdConsentTemplates || [],
+    lgpdPatientConsents: (data as any).lgpdPatientConsents || [],
+    lgpdDataSubjectRequests: (data as any).lgpdDataSubjectRequests || [],
+    lgpdSensitiveAccessLogs: (data as any).lgpdSensitiveAccessLogs || [],
+    professionalUnits: (data as any).professionalUnits || [],
+    professionalRooms: (data as any).professionalRooms || [],
+    patientPortalLogins: (data as any).patientPortalLogins || [],
+    patientSatisfactionRatings: (data as any).patientSatisfactionRatings || []
   };
 }

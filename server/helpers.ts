@@ -68,6 +68,11 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+export function maskCpf(cpf: string): string {
+  if (!cpf || cpf.length < 11) return cpf;
+  return `***.${cpf.slice(3, 6)}.***-${cpf.slice(-2)}`;
+}
+
 export function sanitizeUpdate<T>(body: Record<string, unknown>, allowedFields: (keyof T)[]): Partial<T> {
   const result: Partial<T> = {};
   for (const field of allowedFields) {

@@ -25,7 +25,10 @@ import {
   PieChart,
   Building2,
   MoreHorizontal,
-  X
+  X,
+  TrendingUp,
+  ThumbsUp,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ViewType } from '../App';
@@ -43,6 +46,7 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   return [
     { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' },
     { icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS', superAdminOnly: true },
+    { icon: TrendingUp, label: 'CRM 360', view: 'CRM 360' },
     { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' },
   { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' },
   { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' },
@@ -62,6 +66,7 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   { icon: FileText, label: 'TISS', view: 'TISS' },
   { icon: Package, label: 'Estoques', view: 'Estoques' },
   { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' },
+  { icon: ThumbsUp, label: 'NPS & LGPD', view: 'NPS & LGPD' },
   { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' },
   { icon: Link, label: 'Referências', view: 'Referências' },
   { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' },

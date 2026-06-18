@@ -515,6 +515,336 @@ export interface PaymentGatewayConfig {
   pixKey?: string;
 }
 
+// ============================================================
+// CRM - Lead Sources
+// ============================================================
+export type LeadSourceChannel = 'whatsapp' | 'instagram' | 'facebook' | 'site' | 'google_ads' | 'meta_ads' | 'indicacao' | 'email' | 'telefone' | 'presencial' | 'outro';
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
+export type LeadRating = 'frio' | 'morno' | 'quente';
+export type OpportunityStage = 'lead_qualificado' | 'agendamento_pendente' | 'agendado' | 'compareceu' | 'proposta' | 'fechado' | 'perdido';
+
+export interface LeadSource {
+  id: string;
+  tenantId?: string;
+  name: string;
+  channel: LeadSourceChannel;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmPipeline {
+  id: string;
+  tenantId?: string;
+  name: string;
+  description: string;
+  stages: { name: string; order: number; probability: number }[];
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmLead {
+  id: string;
+  tenantId?: string;
+  pipelineId?: string;
+  fullName: string;
+  email?: string;
+  phone: string;
+  normalizedPhone?: string;
+  source: LeadSourceChannel;
+  sourceId?: string;
+  campaignId?: string;
+  channelConversationId?: string;
+  rating: LeadRating;
+  tags: string[];
+  notes?: string;
+  customFields: Record<string, unknown>;
+  assignedTo?: string;
+  convertedToPatientId?: string;
+  convertedAt?: string;
+  status: LeadStatus;
+  estimatedValue: number;
+  lostReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmOpportunity {
+  id: string;
+  tenantId?: string;
+  pipelineId: string;
+  leadId?: string;
+  patientId?: string;
+  stage: OpportunityStage;
+  stageOrder: number;
+  title: string;
+  value: number;
+  probability: number;
+  expectedCloseDate?: string;
+  assignedTo?: string;
+  notes?: string;
+  lostReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmInteraction {
+  id: string;
+  tenantId?: string;
+  leadId?: string;
+  opportunityId?: string;
+  patientId?: string;
+  channel: LeadSourceChannel;
+  type: string;
+  summary: string;
+  details: Record<string, unknown>;
+  performedBy?: string;
+  performedAt: string;
+  createdAt: string;
+}
+
+export interface CrmTask {
+  id: string;
+  tenantId?: string;
+  leadId?: string;
+  opportunityId?: string;
+  title: string;
+  description?: string;
+  dueDate?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  assignedTo?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// NPS / Satisfação
+// ============================================================
+export interface NpsSurvey {
+  id: string;
+  tenantId?: string;
+  name: string;
+  question: string;
+  sendAfterHours: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NpsResponse {
+  id: string;
+  tenantId?: string;
+  surveyId: string;
+  patientId: string;
+  appointmentId?: string;
+  score: number;
+  category: 'detrator' | 'neutro' | 'promotor';
+  comment?: string;
+  respondedAt: string;
+  createdAt: string;
+}
+
+export interface NpsMetrics {
+  totalResponses: number;
+  npsScore: number;
+  promoters: number;
+  promotersPercent: number;
+  neutrals: number;
+  neutralsPercent: number;
+  detractors: number;
+  detractorsPercent: number;
+  responsesByScore: Record<number, number>;
+  period: { start: string; end: string };
+}
+
+// ============================================================
+// Automação / Lembretes
+// ============================================================
+export type ReminderChannel = 'whatsapp' | 'sms' | 'email';
+export type ReminderStatus = 'pending' | 'sent' | 'delivered' | 'failed';
+
+export interface AutomationTemplate {
+  id: string;
+  tenantId?: string;
+  name: string;
+  channel: ReminderChannel;
+  triggerEvent: 'appointment_confirmed' | 'appointment_reminder' | 'post_appointment' | 'birthday' | 'no_show' | 'custom';
+  delayMinutes: number;
+  messageTemplate: string;
+  variables: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationReminder {
+  id: string;
+  tenantId?: string;
+  templateId?: string;
+  appointmentId?: string;
+  patientId: string;
+  channel: ReminderChannel;
+  destination: string;
+  message: string;
+  status: ReminderStatus;
+  sentAt?: string;
+  deliveredAt?: string;
+  error?: string;
+  scheduledFor: string;
+  createdAt: string;
+}
+
+// ============================================================
+// Portal do Paciente
+// ============================================================
+export interface PatientPortalLogin {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  email: string;
+  passwordHash?: string;
+  isActive: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PatientPortalToken {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  token: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
+}
+
+export interface PatientSatisfactionRating {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  appointmentId?: string;
+  rating: number;
+  feedback?: string;
+  createdAt: string;
+}
+
+// ============================================================
+// LGPD
+// ============================================================
+export type ConsentType = 'tratamento_dados' | 'comunicacao_whatsapp' | 'comunicacao_email' | 'comunicacao_sms' | 'pesquisa_satisfacao' | 'termo_servico' | 'politica_privacidade';
+export type ConsentStatus = 'granted' | 'revoked' | 'expired';
+export type DsarType = 'export' | 'rectification' | 'anonymization' | 'deletion' | 'access';
+export type DsarStatus = 'pending' | 'processing' | 'completed' | 'rejected';
+
+export interface LgpdConsentTemplate {
+  id: string;
+  tenantId?: string;
+  type: ConsentType;
+  title: string;
+  description: string;
+  version: number;
+  isRequired: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LgpdPatientConsent {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  consentTemplateId: string;
+  status: ConsentStatus;
+  grantedAt: string;
+  revokedAt?: string;
+  createdAt: string;
+}
+
+export interface LgpdDataSubjectRequest {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  type: DsarType;
+  status: DsarStatus;
+  description?: string;
+  requestData: Record<string, unknown>;
+  responseData?: Record<string, unknown>;
+  processedBy?: string;
+  processedAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LgpdSensitiveAccessLog {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  actorId: string;
+  actorName: string;
+  accessType: 'view' | 'edit' | 'export';
+  entityType: string;
+  entityId: string;
+  reason: string;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+// ============================================================
+// Profissionais / Unidades / Salas
+// ============================================================
+export interface ProfessionalUnit {
+  id: string;
+  tenantId?: string;
+  name: string;
+  address: { street?: string; city?: string; state?: string; zip?: string };
+  phone?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProfessionalRoom {
+  id: string;
+  tenantId?: string;
+  unitId: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// Marketing Campaigns (new version)
+// ============================================================
+export interface MarketingCampaignV2 {
+  id: string;
+  tenantId?: string;
+  name: string;
+  description?: string;
+  channel?: LeadSourceChannel;
+  type: 'geral' | 'whatsapp' | 'email' | 'sms' | 'meta_ads' | 'google_ads';
+  status: 'draft' | 'scheduled' | 'running' | 'paused' | 'finished' | 'cancelled';
+  goal?: string;
+  targetAudience?: string;
+  budget: number;
+  spent: number;
+  leadsGenerated: number;
+  conversions: number;
+  roi: number;
+  scheduledAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const MOCK_PATIENTS: Patient[] = [
   {
     id: 'p1',

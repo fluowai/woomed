@@ -45,6 +45,25 @@ export interface AppData {
   tenants: Tenant[];
   plans: SaaSPlan[];
   platformOwners: PlatformOwner[];
+  leadSources: LeadSource[];
+  crmPipelines: CrmPipeline[];
+  crmLeads: CrmLead[];
+  crmOpportunities: CrmOpportunity[];
+  crmInteractions: CrmInteraction[];
+  crmTasks: CrmTask[];
+  npsSurveys: NpsSurvey[];
+  npsResponses: NpsResponse[];
+  automationTemplates: AutomationTemplate[];
+  automationReminders: AutomationReminder[];
+  lgpdConsentTemplates: LgpdConsentTemplate[];
+  lgpdPatientConsents: LgpdPatientConsent[];
+  lgpdDataSubjectRequests: LgpdDataSubjectRequest[];
+  lgpdSensitiveAccessLogs: LgpdSensitiveAccessLog[];
+  professionalUnits: ProfessionalUnit[];
+  professionalRooms: ProfessionalRoom[];
+  patientPortalLogins: PatientPortalLogin[];
+  patientPortalTokens: PatientPortalToken[];
+  patientSatisfactionRatings: PatientSatisfactionRating[];
 }
 
 export const dataDir = path.join(process.cwd(), "data");
@@ -92,7 +111,26 @@ export function defaultData(): AppData {
     neuralKnowledge: DEFAULT_NEURAL_KNOWLEDGE,
     tenants: [],
     plans: [],
-    platformOwners: []
+    platformOwners: [],
+    leadSources: [],
+    crmPipelines: [],
+    crmLeads: [],
+    crmOpportunities: [],
+    crmInteractions: [],
+    crmTasks: [],
+    npsSurveys: [],
+    npsResponses: [],
+    automationTemplates: [],
+    automationReminders: [],
+    lgpdConsentTemplates: [],
+    lgpdPatientConsents: [],
+    lgpdDataSubjectRequests: [],
+    lgpdSensitiveAccessLogs: [],
+    professionalUnits: [],
+    professionalRooms: [],
+    patientPortalLogins: [],
+    patientPortalTokens: [],
+    patientSatisfactionRatings: []
   };
 }
 
@@ -104,14 +142,15 @@ export async function loadData(): Promise<AppData> {
     const parsed = JSON.parse(raw) as Partial<AppData>;
     const def = defaultData();
     cachedData = {
+      ...def,
       users: parsed.users?.length ? hydrateSeedUserFields(parsed.users as ServerUser[]) : def.users,
-      patients: parsed.patients?.length ? parsed.patients as Patient[] : def.patients,
+      patients: parsed.patients?.length ? (parsed.patients as Patient[]).map(p => ({ ...p, cpf: ensureDecrypted(p.cpf), responsibleCpf: p.responsibleCpf ? ensureDecrypted(p.responsibleCpf) : p.responsibleCpf })) : def.patients,
       doctors: parsed.doctors?.length ? parsed.doctors as Doctor[] : def.doctors,
       appointments: parsed.appointments?.length ? parsed.appointments as Appointment[] : def.appointments,
       medicalRecords: parsed.medicalRecords || def.medicalRecords,
       financeTransactions: parsed.financeTransactions || def.financeTransactions,
       servicePrices: parsed.servicePrices || def.servicePrices,
-      auditEvents: parsed.auditEvents || [],
+      auditEvents: parsed.auditEvents || def.auditEvents,
       serviceAgents: parsed.serviceAgents || def.serviceAgents,
       marketingCampaigns: parsed.marketingCampaigns || def.marketingCampaigns,
       tissGuides: parsed.tissGuides || def.tissGuides,
@@ -122,18 +161,37 @@ export async function loadData(): Promise<AppData> {
       whatsappConnections: parsed.whatsappConnections || def.whatsappConnections,
       whatsappConversations: parsed.whatsappConversations || def.whatsappConversations,
       whatsappMessages: parsed.whatsappMessages || def.whatsappMessages,
-      patientDocuments: parsed.patientDocuments || [],
-      waitingList: parsed.waitingList || [],
-      scheduleBlocks: parsed.scheduleBlocks || [],
-      medicalTemplates: parsed.medicalTemplates || [],
-      accountsPayable: parsed.accountsPayable || [],
-      paymentGatewayConfig: parsed.paymentGatewayConfig || [],
+      patientDocuments: parsed.patientDocuments || def.patientDocuments,
+      waitingList: parsed.waitingList || def.waitingList,
+      scheduleBlocks: parsed.scheduleBlocks || def.scheduleBlocks,
+      medicalTemplates: parsed.medicalTemplates || def.medicalTemplates,
+      accountsPayable: parsed.accountsPayable || def.accountsPayable,
+      paymentGatewayConfig: parsed.paymentGatewayConfig || def.paymentGatewayConfig,
       llmProviderConfigs: parsed.llmProviderConfigs || def.llmProviderConfigs,
       agentTemplates: parsed.agentTemplates || def.agentTemplates,
       neuralKnowledge: parsed.neuralKnowledge || def.neuralKnowledge,
       tenants: parsed.tenants || def.tenants,
       plans: parsed.plans || def.plans,
-      platformOwners: parsed.platformOwners || def.platformOwners
+      platformOwners: parsed.platformOwners || def.platformOwners,
+      leadSources: parsed.leadSources || def.leadSources,
+      crmPipelines: parsed.crmPipelines || def.crmPipelines,
+      crmLeads: parsed.crmLeads || def.crmLeads,
+      crmOpportunities: parsed.crmOpportunities || def.crmOpportunities,
+      crmInteractions: parsed.crmInteractions || def.crmInteractions,
+      crmTasks: parsed.crmTasks || def.crmTasks,
+      npsSurveys: parsed.npsSurveys || def.npsSurveys,
+      npsResponses: parsed.npsResponses || def.npsResponses,
+      automationTemplates: parsed.automationTemplates || def.automationTemplates,
+      automationReminders: parsed.automationReminders || def.automationReminders,
+      lgpdConsentTemplates: parsed.lgpdConsentTemplates || def.lgpdConsentTemplates,
+      lgpdPatientConsents: parsed.lgpdPatientConsents || def.lgpdPatientConsents,
+      lgpdDataSubjectRequests: parsed.lgpdDataSubjectRequests || def.lgpdDataSubjectRequests,
+      lgpdSensitiveAccessLogs: parsed.lgpdSensitiveAccessLogs || def.lgpdSensitiveAccessLogs,
+      professionalUnits: parsed.professionalUnits || def.professionalUnits,
+      professionalRooms: parsed.professionalRooms || def.professionalRooms,
+      patientPortalLogins: parsed.patientPortalLogins || def.patientPortalLogins,
+      patientPortalTokens: parsed.patientPortalTokens || def.patientPortalTokens,
+      patientSatisfactionRatings: parsed.patientSatisfactionRatings || def.patientSatisfactionRatings
     };
     return cachedData;
   } catch {
