@@ -1,7 +1,8 @@
 import path from "path";
 import fs from "fs/promises";
 import { isDatabaseAvailable } from "./database";
-import { AppUser, Patient, Doctor, Appointment, MedicalRecord, FinanceTransaction, ServicePrice, AuditEvent, ServiceAgent, MarketingCampaign, TissGuide, InventoryItem, ReferralRecord, ReferenceMaterial, HelpTicket, WhatsAppConnection, WhatsAppConversation, WhatsAppMessage, PatientDocument, WaitingListEntry, ScheduleBlock, MedicalTemplate, AccountsPayable, PaymentGatewayConfig, LlmProviderConfig, AgentTemplate, NeuralKnowledgeItem, Tenant, SaaSPlan, PlatformOwner, DEFAULT_SERVICE_PRICES } from "../src/types";
+import { ensureDecrypted } from "./crypto";
+import { AppUser, Patient, Doctor, Appointment, MedicalRecord, FinanceTransaction, ServicePrice, AuditEvent, ServiceAgent, MarketingCampaign, TissGuide, InventoryItem, ReferralRecord, ReferenceMaterial, HelpTicket, WhatsAppConnection, WhatsAppConversation, WhatsAppMessage, PatientDocument, WaitingListEntry, ScheduleBlock, MedicalTemplate, AccountsPayable, PaymentGatewayConfig, LlmProviderConfig, AgentTemplate, NeuralKnowledgeItem, Tenant, SaaSPlan, PlatformOwner, LeadSource, CrmPipeline, CrmLead, CrmOpportunity, CrmInteraction, CrmTask, NpsSurvey, NpsResponse, AutomationTemplate, AutomationReminder, LgpdConsentTemplate, LgpdPatientConsent, LgpdDataSubjectRequest, LgpdSensitiveAccessLog, ProfessionalUnit, ProfessionalRoom, PatientPortalLogin, PatientPortalToken, PatientSatisfactionRating, DEFAULT_SERVICE_PRICES } from "../src/types";
 import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_KNOWLEDGE } from "../src/aiCatalog";
 
 export interface ServerUser extends AppUser {
