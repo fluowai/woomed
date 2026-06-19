@@ -145,12 +145,16 @@ assert(followupTs.includes("export async function unregisterFromFollowUp"), "unr
 assert(followupTs.includes("export async function checkFollowUps"), "checkFollowUps exported");
 assert(followupTs.includes("export async function findAbandonedSessions"), "findAbandonedSessions exported");
 
-// 12. Check agent-router has LLM routing
+// 12. Check agent-router has LLM routing and conversation engine
 console.log("\n--- Agent Router ---");
 const agentRouter = readFileSync(join(root, "server", "modules", "agent-router.ts"), "utf-8");
 assert(agentRouter.includes("extractIntentWithLLM"), "LLM intent extraction");
 assert(agentRouter.includes("extractIntentKeywords"), "Keyword-based intent fallback");
 assert(agentRouter.includes("decideNextAction"), "decideNextAction function");
+assert(agentRouter.includes("getConversationHistory"), "Conversation history tracking");
+assert(agentRouter.includes("addToConversationHistory"), "Add to conversation history");
+assert(agentRouter.includes("buildAgendaContext"), "Agenda context builder");
+assert(agentRouter.includes("buildRichContext"), "Rich context builder");
 
 // 13. Check agent-runtime follow-up integration
 console.log("\n--- Agent Runtime ---");
@@ -158,7 +162,15 @@ const agentRuntime = readFileSync(join(root, "server", "modules", "agent-runtime
 assert(agentRuntime.includes("registerForFollowUp"), "Follow-up registered on session create");
 assert(agentRuntime.includes("unregisterFromFollowUp"), "Follow-up unregistered on session resolve");
 
-// 14. Check Automation frontend component
+// 14. Check responderPergunta uses conversation history
+console.log("\n--- Agent Actions Module (conversation) ---");
+const agentActionsModule = readFileSync(join(root, "server", "modules", "agent-actions.ts"), "utf-8");
+assert(agentActionsModule.includes("conversationHistory"), "responderPergunta uses conversationHistory");
+assert(agentActionsModule.includes("Regras importantes"), "System prompt has no-repeat instruction");
+assert(agentActionsModule.includes("extractDateTimeFromConversation"), "Date/time extraction from conversation");
+assert(agentActionsModule.includes("lastSuggestions"), "Suggestions stored in session context");
+
+// 15. Check Automation frontend component
 console.log("\n--- Automation UI ---");
 const automationModule = readFileSync(join(root, "src", "components", "AutomationModule.tsx"), "utf-8");
 assert(automationModule.includes("SchedulerPanel"), "SchedulerPanel component");

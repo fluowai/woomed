@@ -1,9 +1,10 @@
 import { loadData, saveData } from "../data";
-import type { AgentSession, AgentActionType, AgentAction } from "../../src/agent-types";
-import type { ServiceAgent } from "../../src/types";
+import type { AgentSession, AgentActionType, AgentAction, AgentExecutionLog } from "../../src/agent-types";
+import type { ServiceAgent, Patient, Doctor, Appointment } from "../../src/types";
 import { matchAgent, findOrCreateSession, updateSession, createAction, updateAction, logExecution, createLead, updateLead, getSession } from "./agent-runtime";
 import { executeAction } from "./agent-actions";
 import { HAS_GEMINI_KEY, GEMINI_API_KEY } from "../config";
+import { nowIso } from "../helpers";
 
 interface IncomingMessage {
   text: string;
@@ -20,6 +21,8 @@ interface RouterResult {
   escalated: boolean;
 }
 
+const MAX_HISTORY = 12;
+
 async function callLLM(systemPrompt: string, userMessage: string): Promise<string> {
   if (!HAS_GEMINI_KEY) return "";
   const { GoogleGenAI } = await import("@google/genai");
@@ -30,6 +33,55 @@ async function callLLM(systemPrompt: string, userMessage: string): Promise<strin
     config: { systemInstruction: systemPrompt }
   });
   return response.text || "";
+}
+
+function getConversationHistory(session: AgentSession): any[] {
+  return (session.context.conversationHistory as any[]) || [];
+}
+
+function addToConversationHistory(session: AgentSession, role: "user" | "assistant", content: string): void {
+  const history = getConversationHistory(session);
+  history.push({ role, content, timestamp: nowIso() });
+  if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  session.context.conversationHistory = history;
+}
+
+function formatConversationHistory(history: any[]): string {
+  return history.map(h => `${h.role === "user" ? "Paciente" : "Assistente"}: ${h.content}`).join("\n");
+}
+
+async function buildAgendaContext(data: any, session: AgentSession): Promise<string> {
+  const parts: string[] = [];
+
+  if (session.patientId) {
+    const patient = data.patients.find((p: Patient) => p.id === session.patientId);
+    if (patient) {
+      const patientAppointments = data.appointments
+        .filter((a: Appointment) => {
+          const match = data.patients.find((p: Patient) => p.fullName.toUpperCase() === a.patientName.toUpperCase());
+          return match?.id === patient.id;
+        })
+        .sort((a: Appointment, b: Appointment) => b.date.localeCompare(a.date))
+        .slice(0, 5);
+      if (patientAppointments.length > 0) {
+        parts.push("--- Consultas do Paciente ---");
+        patientAppointments.forEach((a: Appointment) => {
+          const doctor = data.doctors.find((d: Doctor) => d.id === a.doctorId);
+          parts.push(`${a.date} as ${a.timeStart} com ${doctor?.name || "N/A"} (${a.status})`);
+        });
+      }
+    }
+  }
+
+  const doctors = data.doctors || [];
+  if (doctors.length > 0) {
+    parts.push("--- Profissionais Disponiveis ---");
+    doctors.forEach((d: Doctor) => {
+      parts.push(`${d.name} - ${d.specialty} (${d.availableDays?.join(", ") || "Seg-Sex"} ${d.workingHours?.start || "08:00"}-${d.workingHours?.end || "18:00"})`);
+    });
+  }
+
+  return parts.join("\n");
 }
 
 async function extractIntentWithLLM(text: string, leadStage: string, agent: ServiceAgent, conversationSummary?: string): Promise<{ action: AgentActionType; params: Record<string, unknown> } | null> {
@@ -51,6 +103,11 @@ Ações disponíveis:
 - "agendar_consulta": Paciente escolheu um horário específico
 - "criar_tarefa": Solicitação de tarefa para equipe
 
+Regras importantes:
+- Se o lead já está agendado (leadStage=agendado), use "responder_pergunta" para continuar conversando naturalmente
+- Se o lead já está qualificado (leadStage=qualificado), não precisa qualificar de novo
+- Se o paciente está escolhendo um horário entre opções já oferecidas, use "agendar_consulta"
+
 Estágio atual do lead: ${leadStage}
 Nome do agente: ${agent?.name || "Assistente"}
 Objetivo: ${agent?.objective || "Atender pacientes"}
@@ -59,7 +116,8 @@ Regras: ${(agent?.rules || []).join("; ")}
 Responda APENAS JSON: {"action": "nome_da_acao", "reason": "explicacao_curta", "params": {}}`;
 
   const prompt = `Mensagem: "${text}"\n${conversationSummary ? `Resumo da conversa: ${conversationSummary}` : ""}
-${leadStage === "agendando" ? "O paciente está no estágio de escolha de horário. Verifique se ele mencionou um horário/dia específico." : ""}`;
+${leadStage === "agendando" ? "O paciente está no estágio de escolha de horário. Verifique se ele mencionou um horário/dia específico." : ""}
+${leadStage === "agendado" ? "O paciente já tem consulta agendada. Responda normalmente sem tentar reagendar a menos que ele peça." : ""}`;
 
   try {
     const raw = await callLLM(systemPrompt, prompt);
@@ -99,15 +157,29 @@ function extractIntentKeywords(text: string): { action: AgentActionType; params:
 }
 
 async function decideNextAction(session: AgentSession, text: string, agent: ServiceAgent): Promise<{ action: AgentActionType; params: Record<string, unknown> }> {
-  // Try LLM first for smarter routing
+  if (session.leadStage === "agendado" || session.leadStage === "convertido") {
+    const lower = text.toLowerCase();
+    if (/cancelar|remarcar|reagendar|desmarcar/.test(lower)) {
+      const intent = extractIntentKeywords(text);
+      if (intent) return intent;
+    }
+    return { action: "responder_pergunta", params: { message: text } };
+  }
+
+  if (session.leadStage === "perdido") {
+    const lower = text.toLowerCase();
+    if (/agendar|marcar|quero|consulta|horario/.test(lower)) {
+      return { action: "sugerir_horarios", params: { conversation: text } };
+    }
+    return { action: "responder_pergunta", params: { message: text } };
+  }
+
   const llmIntent = await extractIntentWithLLM(text, session.leadStage || "novo", agent);
   if (llmIntent) return llmIntent;
 
-  // Fallback to keyword matching
   const intentMatch = extractIntentKeywords(text);
   if (intentMatch) return intentMatch;
 
-  // Stage-based routing
   if (session.leadStage === "novo" || session.leadStage === "contatado") {
     return { action: "qualificar_lead", params: { conversation: text, name: session.contactName } };
   }
@@ -121,15 +193,21 @@ async function decideNextAction(session: AgentSession, text: string, agent: Serv
   return { action: "responder_pergunta", params: { message: text } };
 }
 
-async function buildAgentContext(agent: ServiceAgent): Promise<string> {
-  return [
-    `Nome: ${agent.name}`,
-    `Objetivo: ${agent.objective}`,
-    `Tom: ${agent.tone}`,
-    `Regras: ${agent.rules.join("; ")}`,
-    `Conhecimento: ${agent.knowledgeBase.join("; ")}`,
-    `Horario: ${agent.workingHours}`,
-  ].join("\n");
+async function buildRichContext(agent: ServiceAgent, session: AgentSession): Promise<string> {
+  const data = await loadData();
+  const parts: string[] = [];
+
+  parts.push(`Nome do agente: ${agent.name}`);
+  parts.push(`Objetivo: ${agent.objective}`);
+  parts.push(`Tom: ${agent.tone}`);
+  parts.push(`Regras: ${agent.rules.join("; ")}`);
+  parts.push(`Conhecimento: ${agent.knowledgeBase.join("; ")}`);
+  parts.push(`Horario: ${agent.workingHours}`);
+
+  const agenda = await buildAgendaContext(data, session);
+  if (agenda) parts.push(agenda);
+
+  return parts.join("\n");
 }
 
 export async function processIncomingMessage(msg: IncomingMessage, overrideAgentId?: string): Promise<RouterResult> {
@@ -152,6 +230,9 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
     msg.channel, agent.id, agent.name
   );
 
+  addToConversationHistory(session, "user", msg.text);
+  await updateSession(session.id, { context: session.context });
+
   const startTime = Date.now();
   const { action: actionType, params } = await decideNextAction(session, msg.text, agent);
 
@@ -159,13 +240,24 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
   await updateAction(action.id, { status: "executing" });
 
   try {
-    const agentContext = await buildAgentContext(agent);
+    const agentContext = await buildRichContext(agent, session);
+    const history = getConversationHistory(session);
+    const conversationSummary = formatConversationHistory(history);
+
     const enrichedParams = {
       ...params,
       conversation: msg.text,
+      conversationHistory: history,
+      conversationSummary,
       knowledgeBase: agent.knowledgeBase,
       agentContext,
+      session,
     };
+
+    if (session.appointmentId) {
+      const apt = data.appointments.find((a: Appointment) => a.id === session.appointmentId);
+      if (apt) (enrichedParams as any).currentAppointment = apt;
+    }
 
     const result = await executeAction(session, actionType, enrichedParams);
     const latency = Date.now() - startTime;
@@ -176,9 +268,12 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
       completedAt: new Date().toISOString(),
     });
 
+    const replyText = result.output?.answer ? String(result.output.answer) : result.message;
+    addToConversationHistory(session, "assistant", replyText);
+
     await logExecution(
       session.id, agent.id, actionType,
-      msg.text, result.message, result.success, latency,
+      msg.text, replyText, result.success, latency,
       result.success ? undefined : result.message
     );
 
@@ -213,29 +308,13 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
       }
     }
 
+    await updateSession(session.id, { context: session.context });
+
     if (actionType === "escalar_humano" || result.output?.escalationTo) {
-      return {
-        reply: result.message,
-        session,
-        action,
-        escalated: true,
-      };
+      return { reply: replyText, session, action, escalated: true };
     }
 
-    if (actionType === "cancelar_consulta" && result.success) {
-      return {
-        reply: result.message + " Se precisar de mais algo, estou aqui.",
-        session,
-        action,
-        escalated: false,
-      };
-    }
-
-    const reply = result.output?.answer
-      ? String(result.output.answer)
-      : result.message;
-
-    return { reply, session, action, escalated: false };
+    return { reply: replyText, session, action, escalated: false };
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : "Erro desconhecido";

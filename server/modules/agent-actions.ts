@@ -146,6 +146,11 @@ const sugerirHorarios: ActionHandler = async (session, input) => {
     }
   }
 
+  if (suggestions.length > 0) {
+    session.context.lastSuggestions = suggestions;
+    session.context.lastDoctorId = doctor.id;
+  }
+
   return {
     success: true,
     output: { doctor: { id: doctor.id, name: doctor.name }, suggestions },
@@ -155,18 +160,44 @@ const sugerirHorarios: ActionHandler = async (session, input) => {
   };
 };
 
+async function extractDateTimeFromConversation(conversation: string, suggestions?: { date: string; time: string }[]): Promise<{ date: string; time: string } | null> {
+  if (!HAS_GEMINI_KEY || !conversation) return null;
+
+  const systemPrompt = `Extraia data e horario que o paciente escolheu. Responda APENAS JSON: {"date": "YYYY-MM-DD", "time": "HH:MM"}. Se nao encontrar, responda {"date": "", "time": ""}.`;
+  const suggestionsStr = suggestions?.length ? `\nSugestoes disponiveis:\n${suggestions.map((s, i) => `${i + 1}. ${s.date} as ${s.time}`).join("\n")}` : "";
+  const prompt = `Fala do paciente: "${conversation}"${suggestionsStr}`;
+
+  try {
+    const raw = await callLLM(systemPrompt, prompt);
+    const parsed = JSON.parse(raw);
+    if (parsed.date && parsed.time) return { date: parsed.date, time: parsed.time };
+  } catch {}
+  return null;
+}
+
 const agendarConsulta: ActionHandler = async (session, input) => {
   const data = await loadData();
   const doctorId = String(input.doctorId || session.context.doctorId || "");
-  const date = String(input.date || "");
-  const timeStart = String(input.timeStart || input.time || "");
+  let date = String(input.date || "");
+  let timeStart = String(input.timeStart || input.time || "");
   const patientName = String(input.patientName || session.contactName || "");
   const patientPhone = String(input.phone || session.contactPhone || "");
   const type = String(input.type || "consulta");
-  const doctor = data.doctors.find(d => d.id === doctorId);
+  const conversation = String(input.conversation || "");
 
+  const doctor = data.doctors.find(d => d.id === doctorId);
   if (!doctor) return { success: false, output: {}, message: "Profissional nao encontrado" };
-  if (!date || !timeStart) return { success: false, output: {}, message: "Data e horario obrigatorios" };
+
+  if ((!date || !timeStart) && conversation) {
+    const suggestions = (input as any).suggestions || (session.context as any).lastSuggestions;
+    const extracted = await extractDateTimeFromConversation(conversation, suggestions);
+    if (extracted) {
+      date = extracted.date;
+      timeStart = extracted.time;
+    }
+  }
+
+  if (!date || !timeStart) return { success: false, output: {}, message: "Informe qual horario voce prefere entre as opcoes que mostrei" };
 
   const timeEnd = addMinutes(timeStart, 30);
   const existingAppointments = data.appointments.filter(a => a.doctorId === doctorId && a.status !== "desmarcado");
@@ -540,10 +571,9 @@ const avaliarDisponibilidade: ActionHandler = async (_session, input) => {
 };
 
 const responderPergunta: ActionHandler = async (session, input) => {
-  const question = String(input.question || input.pergunta || input.message || "");
+  const question = String(input.question || input.pergunta || input.message || input.conversation || "");
 
   if (!HAS_GEMINI_KEY) {
-    const kb = String(session.context.knowledgeBase || "");
     return {
       success: true,
       output: { answer: "Desculpe, o assistente IA nao esta configurado. Configure GEMINI_API_KEY.", usedKb: false },
@@ -556,19 +586,53 @@ const responderPergunta: ActionHandler = async (session, input) => {
   const knowledgeBase = agent?.knowledgeBase || [];
   const rules = agent?.rules || [];
 
-  const systemPrompt = `Voce e um assistente virtual de uma clinica medica chamado ${agent?.name || "Assistente"}.
-Tom: ${agent?.tone || "profissional"}
-Regras: ${rules.join("\n")}
-Conhecimento: ${knowledgeBase.join("\n")}
+  const history = (input.conversationHistory as any[]) || [];
+  const historyStr = history.length > 0
+    ? history.map((h: any) => `${h.role === "user" ? "Paciente" : "Assistente"}: ${h.content}`).join("\n")
+    : "Nenhum historico ainda.";
 
-Responda em portugues de forma clara e objetiva. Nao invente informacoes medicas. Se nao souber, diga que vai transferir para um atendente humano.`;
+  const agentCtx = String(input.agentContext || "");
 
-  const prompt = `Pergunta do paciente (${session.contactName}): ${question}`;
+  let appointmentStr = "";
+  if (session.appointmentId) {
+    const apt = data.appointments.find((a: Appointment) => a.id === session.appointmentId);
+    if (apt) {
+      const doctor = data.doctors.find((d: Doctor) => d.id === apt.doctorId);
+      appointmentStr = `\nConsulta atual: ${apt.date} as ${apt.timeStart} com ${doctor?.name || "N/A"} (${apt.status})`;
+    }
+  }
+
+  const systemPrompt = `Você é um assistente virtual de uma clinica medica chamado ${agent?.name || "Assistente"}.
+
+${agentCtx}
+
+Regras importantes:
+1. NÃO repita informações que já foram ditas na conversa
+2. NÃO peça informações que o paciente já forneceu
+3. NÃO invente informações medicas
+4. Se o paciente já tem consulta agendada, NÃO ofereça agendar outra a menos que ele peça
+5. Responda em portugues de forma clara, objetiva e natural
+6. Se nao souber algo, diga que vai transferir para um atendente humano
+7. Mantenha o contexto da conversa - lembre do que foi discutido antes
+8. Se o paciente ja perguntou algo e voce ja respondeu, nao repita a resposta
+
+Conhecimento: ${knowledgeBase.join(", ")}
+Estagio do lead: ${session.leadStage || "novo"}${appointmentStr}`;
+
+  const prompt = `--- HISTORICO DA CONVERSA (ordenado do mais antigo ao mais recente) ---
+${historyStr}
+
+--- ULTIMA MENSAGEM DO PACIENTE ---
+Paciente (${session.contactName}): ${question}
+
+--- INSTRUCAO ---
+Responda considerando TODO o historico acima. Nao repita o que ja foi dito. Seja natural e coerente.`;
+
   const answer = await callLLM(systemPrompt, prompt);
 
   return {
     success: true,
-    output: { answer, question, usedKb: true },
+    output: { answer, question, usedKb: true, conversationHistory: history },
     message: answer
   };
 };
