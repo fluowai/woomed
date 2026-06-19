@@ -2,7 +2,7 @@ name: Build & Push Docker Images
 
 on:
   push:
-    branches: [codex/beta-test-hardening]
+    branches: [codex/beta-test-hardening, main]
     paths-ignore:
       - "**.md"
       - ".gitignore"
