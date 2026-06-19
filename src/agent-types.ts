@@ -15,7 +15,11 @@ export type AgentActionType =
   | "buscar_paciente"
   | "criar_tarefa"
   | "avaliar_disponibilidade"
-  | "responder_pergunta";
+  | "responder_pergunta"
+  | "consultar_prontuario"
+  | "consultar_financeiro"
+  | "enviar_orcamento"
+  | "consultar_paciente_completo";
 
 export type AgentSessionStatus = "active" | "waiting_human" | "resolved" | "expired";
 

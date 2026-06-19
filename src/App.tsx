@@ -30,7 +30,8 @@ import {
 import { AgentPipelineDashboard, SdrPipeline, AgentConversations, AgentMetricsView } from './components/AgentModules';
 import CrmModule from './components/CrmModule';
 import NpsLgpdModule from './components/NpsLgpdModule';
-import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles, LayoutDashboard, TrendingUp, Smartphone, Bot, Users, DollarSign, Megaphone, FileText, Package, BarChart3, ClipboardList, UsersRound, HelpCircle } from 'lucide-react';
+import AutomationModule from './components/AutomationModule';
+import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles, LayoutDashboard, TrendingUp, Smartphone, Bot, Users, DollarSign, Megaphone, FileText, Package, BarChart3, ClipboardList, UsersRound, HelpCircle, Zap } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, BootstrapState } from './api';
 import { ToastProvider, ToastListener, showToast } from './components/Toast';
@@ -843,6 +844,8 @@ export default function App() {
         return <CrmModule token={authToken} userRole={currentUser?.role || ''} />;
       case 'NPS & LGPD':
         return <NpsLgpdModule token={authToken} userRole={currentUser?.role || ''} />;
+      case 'Automação':
+        return <AutomationModule token={authToken} />;
       case 'Ajuda':
         return (
           <HelpModule
@@ -926,6 +929,7 @@ export default function App() {
                 { icon: FileText, label: 'TISS', view: 'TISS' as ViewType },
                 { icon: Package, label: 'Estoques', view: 'Estoques' as ViewType },
                 { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' as ViewType },
+                { icon: Zap, label: 'Automação', view: 'Automação' as ViewType },
                 { icon: ClipboardList, label: 'NPS & LGPD', view: 'NPS & LGPD' as ViewType },
                 { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' as ViewType },
                 { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' as ViewType },

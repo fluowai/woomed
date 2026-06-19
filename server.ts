@@ -6,7 +6,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { PORT, setWhatsmeowApiUrl } from "./server/config";
-import { isDatabaseAvailable, runMigrations } from "./server/database";
+import { isDatabaseAvailable, runMigrations, runSeed } from "./server/database";
 import { registerRoutes } from "./server/routes/index";
 import { registerWhatsAppRoutes } from "./server/routes/whatsapp";
 import { registerPhase1Routes } from "./server/routes/phase1";
@@ -17,6 +17,8 @@ import { registerCrmRoutes } from "./server/routes/crm";
 import { registerModules360Routes } from "./server/routes/modules-360";
 import { scheduleAutoBackup } from "./server/backup";
 import { startBridge, stopBridge } from "./server/whatsmeow-bridge-manager";
+import { startScheduler } from "./server/modules/scheduler";
+import type { Express } from "express";
 
 const requestId = () => Math.random().toString(36).slice(2, 10);
 
@@ -85,6 +87,7 @@ async function startServer() {
   if (isDatabaseAvailable()) {
     try {
       await runMigrations();
+      await runSeed();
       console.log("PostgreSQL connected and migrations applied.");
     } catch (error) {
       console.error("PostgreSQL migration failed, falling back to JSON storage:", error);
@@ -146,6 +149,13 @@ async function startServer() {
   registerSaaSRoutes(app);
   registerCrmRoutes(app);
   registerModules360Routes(app);
+
+  // Scheduler routes
+  const { registerSchedulerRoutes } = await import("./server/routes/scheduler-routes");
+  registerSchedulerRoutes(app);
+
+  // Start background scheduler
+  startScheduler();
 
   // Auto backup
   scheduleAutoBackup().catch(console.error);

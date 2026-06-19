@@ -43,6 +43,13 @@ const requiredFiles = [
   "server/backup.ts",
   "server/crypto.ts",
   "server/audit.ts",
+  "server/modules/scheduler.ts",
+  "server/modules/followup.ts",
+  "server/modules/agent-actions.ts",
+  "server/modules/agent-router.ts",
+  "server/modules/agent-runtime.ts",
+  "server/routes/scheduler-routes.ts",
+  "src/components/AutomationModule.tsx",
 ];
 for (const file of requiredFiles) {
   assert(existsSync(join(root, file)), `Required file exists: ${file}`);
@@ -113,7 +120,55 @@ for (const { pattern, name } of dangerousPatterns) {
   }
 }
 
-// 9. Verify build output
+// 9. Check new agent action types
+console.log("\n--- Agent Actions ---");
+const agentActions = readFileSync(join(root, "src", "agent-types.ts"), "utf-8");
+assert(agentActions.includes("consultar_prontuario"), "Agent action: consultar_prontuario");
+assert(agentActions.includes("consultar_financeiro"), "Agent action: consultar_financeiro");
+assert(agentActions.includes("enviar_orcamento"), "Agent action: enviar_orcamento");
+assert(agentActions.includes("consultar_paciente_completo"), "Agent action: consultar_paciente_completo");
+
+// 10. Check scheduler exports
+console.log("\n--- Scheduler ---");
+const schedulerTs = readFileSync(join(root, "server", "modules", "scheduler.ts"), "utf-8");
+assert(schedulerTs.includes("export function startScheduler"), "startScheduler exported");
+assert(schedulerTs.includes("export function stopScheduler"), "stopScheduler exported");
+assert(schedulerTs.includes("export async function getSchedulerStatus"), "getSchedulerStatus exported");
+assert(schedulerTs.includes("export async function scheduleReminder"), "scheduleReminder exported");
+assert(schedulerTs.includes("CHECK_INTERVAL_MS"), "CHECK_INTERVAL_MS defined");
+
+// 11. Check follow-up exports
+console.log("\n--- Follow-up ---");
+const followupTs = readFileSync(join(root, "server", "modules", "followup.ts"), "utf-8");
+assert(followupTs.includes("export async function registerForFollowUp"), "registerForFollowUp exported");
+assert(followupTs.includes("export async function unregisterFromFollowUp"), "unregisterFromFollowUp exported");
+assert(followupTs.includes("export async function checkFollowUps"), "checkFollowUps exported");
+assert(followupTs.includes("export async function findAbandonedSessions"), "findAbandonedSessions exported");
+
+// 12. Check agent-router has LLM routing
+console.log("\n--- Agent Router ---");
+const agentRouter = readFileSync(join(root, "server", "modules", "agent-router.ts"), "utf-8");
+assert(agentRouter.includes("extractIntentWithLLM"), "LLM intent extraction");
+assert(agentRouter.includes("extractIntentKeywords"), "Keyword-based intent fallback");
+assert(agentRouter.includes("decideNextAction"), "decideNextAction function");
+
+// 13. Check agent-runtime follow-up integration
+console.log("\n--- Agent Runtime ---");
+const agentRuntime = readFileSync(join(root, "server", "modules", "agent-runtime.ts"), "utf-8");
+assert(agentRuntime.includes("registerForFollowUp"), "Follow-up registered on session create");
+assert(agentRuntime.includes("unregisterFromFollowUp"), "Follow-up unregistered on session resolve");
+
+// 14. Check Automation frontend component
+console.log("\n--- Automation UI ---");
+const automationModule = readFileSync(join(root, "src", "components", "AutomationModule.tsx"), "utf-8");
+assert(automationModule.includes("SchedulerPanel"), "SchedulerPanel component");
+assert(automationModule.includes("FollowUpPanel"), "FollowUpPanel component");
+assert(automationModule.includes("TemplatesPanel"), "TemplatesPanel component");
+assert(automationModule.includes("/api/v2/scheduler/status"), "Scheduler status API call");
+assert(automationModule.includes("/api/v2/followup/queue"), "Follow-up queue API call");
+assert(automationModule.includes("/api/v2/automation/templates"), "Templates API call");
+
+// 15. Verify build output
 console.log("\n--- Build output ---");
 assert(existsSync(join(root, "dist", "index.html")), "Frontend build: index.html exists");
 assert(existsSync(join(root, "dist", "server.cjs")), "Backend build: server.cjs exists");

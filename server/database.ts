@@ -1,4 +1,5 @@
 import { Pool, QueryResult } from "pg";
+import { seedUsers } from "./seed";
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
 
@@ -194,6 +195,36 @@ export async function runMigrations(): Promise<void> {
   } catch (error) {
     console.error("Migration error:", error);
     throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function runSeed(): Promise<void> {
+  if (!isDatabaseAvailable()) return;
+
+  const client = await getPool().connect();
+  try {
+    const tenantRes = await client.query("SELECT id FROM tenants LIMIT 1");
+    let tenantId = tenantRes.rows[0]?.id;
+    if (!tenantId) {
+      const res = await client.query("INSERT INTO tenants (slug, legal_name, trade_name) VALUES ('default', 'Consultio Med', 'Consultio Med') RETURNING id");
+      tenantId = res.rows[0].id;
+    }
+
+    for (const user of seedUsers) {
+      if (!user.email) continue;
+      const exists = await client.query("SELECT id FROM users WHERE email = $1", [user.email]);
+      if (exists.rows.length === 0) {
+        await client.query(
+          "INSERT INTO users (tenant_id, email, name, password_hash, role, specialty, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [tenantId, user.email, user.name, user.passwordHash, user.role, user.specialty || null, user.isActive]
+        );
+      }
+    }
+    console.log("Database seeded with default users.");
+  } catch (error) {
+    console.error("Seed error:", error);
   } finally {
     client.release();
   }

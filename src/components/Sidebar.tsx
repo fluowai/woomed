@@ -1,4 +1,4 @@
-import { 
+import {
   BarChart3, 
   Bot,
   Calendar, 
@@ -28,7 +28,8 @@ import {
   X,
   TrendingUp,
   ThumbsUp,
-  Shield
+  Shield,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ViewType } from '../App';
@@ -67,6 +68,7 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   { icon: Package, label: 'Estoques', view: 'Estoques' },
   { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' },
   { icon: ThumbsUp, label: 'NPS & LGPD', view: 'NPS & LGPD' },
+  { icon: Zap, label: 'Automação', view: 'Automação' },
   { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' },
   { icon: Link, label: 'Referências', view: 'Referências' },
   { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' },

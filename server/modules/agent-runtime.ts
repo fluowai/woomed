@@ -8,6 +8,7 @@ import type {
   AgentSession, AgentAction, AgentExecutionLog, AgentLead,
   AgentActionType, LeadStage, UrgencyLevel, AgentSessionStatus
 } from "../../src/agent-types";
+import { registerForFollowUp, unregisterFromFollowUp } from "./followup";
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -108,6 +109,7 @@ export async function findOrCreateSession(
   };
   rt.sessions.push(session);
   await saveData(data);
+  registerForFollowUp(session).catch(() => {});
   return session;
 }
 
@@ -116,8 +118,12 @@ export async function updateSession(sessionId: string, updates: Partial<AgentSes
   const rt = getRuntime(data);
   const session = rt.sessions.find(s => s.id === sessionId);
   if (!session) return null;
+  const oldStatus = session.status;
   Object.assign(session, updates, { updatedAt: new Date().toISOString() });
   await saveData(data);
+  if (updates.status && updates.status !== oldStatus && (updates.status === "resolved" || updates.status === "expired")) {
+    unregisterFromFollowUp(sessionId).catch(() => {});
+  }
   return session;
 }
 

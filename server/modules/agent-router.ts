@@ -1,8 +1,9 @@
 import { loadData, saveData } from "../data";
 import type { AgentSession, AgentActionType, AgentAction } from "../../src/agent-types";
 import type { ServiceAgent } from "../../src/types";
-import { matchAgent, findOrCreateSession, updateSession, createAction, updateAction, logExecution, createLead, updateLead } from "./agent-runtime";
+import { matchAgent, findOrCreateSession, updateSession, createAction, updateAction, logExecution, createLead, updateLead, getSession } from "./agent-runtime";
 import { executeAction } from "./agent-actions";
+import { HAS_GEMINI_KEY, GEMINI_API_KEY } from "../config";
 
 interface IncomingMessage {
   text: string;
@@ -19,37 +20,94 @@ interface RouterResult {
   escalated: boolean;
 }
 
-function extractIntent(text: string): { action: AgentActionType; params: Record<string, unknown> } | null {
+async function callLLM(systemPrompt: string, userMessage: string): Promise<string> {
+  if (!HAS_GEMINI_KEY) return "";
+  const { GoogleGenAI } = await import("@google/genai");
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY, httpOptions: { headers: { "User-Agent": "consultio-med" } } });
+  const response = await ai.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: userMessage,
+    config: { systemInstruction: systemPrompt }
+  });
+  return response.text || "";
+}
+
+async function extractIntentWithLLM(text: string, leadStage: string, agent: ServiceAgent, conversationSummary?: string): Promise<{ action: AgentActionType; params: Record<string, unknown> } | null> {
+  if (!HAS_GEMINI_KEY) return null;
+
+  const systemPrompt = `Você é um roteador de intenções para uma clínica médica.
+Analise a mensagem do paciente e o estágio atual do lead e responda APENAS JSON com a ação mais adequada.
+
+Ações disponíveis:
+- "cancelar_consulta": Paciente quer cancelar consulta
+- "remarcar_consulta": Paciente quer reagendar
+- "confirmar_consulta": Paciente quer confirmar
+- "sugerir_horarios": Paciente quer agendar nova consulta
+- "classificar_urgencia": Situação de emergência/dor/urgência
+- "coletar_feedback": Paciente quer dar feedback/avaliação
+- "escalar_humano": Paciente pediu atendente humano, reclamação
+- "buscar_paciente": Perguntando sobre dados de paciente
+- "responder_pergunta": Pergunta geral sobre clínica, serviços, convênios
+- "agendar_consulta": Paciente escolheu um horário específico
+- "criar_tarefa": Solicitação de tarefa para equipe
+
+Estágio atual do lead: ${leadStage}
+Nome do agente: ${agent?.name || "Assistente"}
+Objetivo: ${agent?.objective || "Atender pacientes"}
+Regras: ${(agent?.rules || []).join("; ")}
+
+Responda APENAS JSON: {"action": "nome_da_acao", "reason": "explicacao_curta", "params": {}}`;
+
+  const prompt = `Mensagem: "${text}"\n${conversationSummary ? `Resumo da conversa: ${conversationSummary}` : ""}
+${leadStage === "agendando" ? "O paciente está no estágio de escolha de horário. Verifique se ele mencionou um horário/dia específico." : ""}`;
+
+  try {
+    const raw = await callLLM(systemPrompt, prompt);
+    const parsed = JSON.parse(raw);
+    if (parsed.action) {
+      return { action: parsed.action as AgentActionType, params: { ...(parsed.params || {}), llmReason: parsed.reason || "" } };
+    }
+  } catch {}
+  return null;
+}
+
+function extractIntentKeywords(text: string): { action: AgentActionType; params: Record<string, unknown> } | null {
   const lower = text.toLowerCase().trim();
 
-  if (/cancelar|desmarcar|cancela/i.test(lower)) {
+  if (/cancelar|desmarcar|cancela|desmarcado/i.test(lower)) {
     return { action: "cancelar_consulta", params: { motivo: text } };
   }
-  if (/remarcar|reagendar|mudar.horario|alterar/i.test(lower)) {
+  if (/remarcar|reagendar|mudar.horario|alterar|outro.horario|outra.data/i.test(lower)) {
     return { action: "remarcar_consulta", params: { motivo: text } };
   }
-  if (/confirmar|confirmo|pode.confirmar|confirmado/i.test(lower)) {
+  if (/confirmar|confirmo|pode.confirmar|confirmado|confirmada/i.test(lower)) {
     return { action: "confirmar_consulta", params: {} };
   }
-  if (/agendar|marcar|quero.consulta|quero.agendar|horario/i.test(lower)) {
+  if (/agendar|marcar|quero.consulta|quero.agendar|horario.dispon|marcar.consulta|quero.marcar/i.test(lower)) {
     return { action: "sugerir_horarios", params: { conversation: text } };
   }
-  if (/urgente|emergencia|dor|sangrando|grave/i.test(lower)) {
+  if (/urgente|emergencia|dor|sangrando|grave|imediatamente|preciso.de.ajuda.agora/i.test(lower)) {
     return { action: "classificar_urgencia", params: { message: text } };
   }
-  if (/feedback|avaliacao|nota|satisfacao|como.foi/i.test(lower)) {
+  if (/feedback|avaliacao|nota|satisfacao|como.foi|avaliar/i.test(lower)) {
     return { action: "coletar_feedback", params: {} };
   }
-  if (/falar.com.humano|atendente|transferir|humano|suporte|reclamacao|falar.pessoa/i.test(lower)) {
+  if (/falar.com.humano|atendente|transferir|humano|suporte|reclamacao|falar.pessoa|quero.falar|atendente.humano/i.test(lower)) {
     return { action: "escalar_humano", params: { motivo: text } };
   }
   return null;
 }
 
-function decideNextAction(session: AgentSession, text: string): { action: AgentActionType; params: Record<string, unknown> } {
-  const intentMatch = extractIntent(text);
+async function decideNextAction(session: AgentSession, text: string, agent: ServiceAgent): Promise<{ action: AgentActionType; params: Record<string, unknown> }> {
+  // Try LLM first for smarter routing
+  const llmIntent = await extractIntentWithLLM(text, session.leadStage || "novo", agent);
+  if (llmIntent) return llmIntent;
+
+  // Fallback to keyword matching
+  const intentMatch = extractIntentKeywords(text);
   if (intentMatch) return intentMatch;
 
+  // Stage-based routing
   if (session.leadStage === "novo" || session.leadStage === "contatado") {
     return { action: "qualificar_lead", params: { conversation: text, name: session.contactName } };
   }
@@ -95,7 +153,7 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
   );
 
   const startTime = Date.now();
-  const { action: actionType, params } = decideNextAction(session, msg.text);
+  const { action: actionType, params } = await decideNextAction(session, msg.text, agent);
 
   const action = await createAction(session.id, agent.id, actionType, { ...params, rawMessage: msg.text });
   await updateAction(action.id, { status: "executing" });

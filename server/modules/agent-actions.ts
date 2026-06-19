@@ -573,6 +573,143 @@ Responda em portugues de forma clara e objetiva. Nao invente informacoes medicas
   };
 };
 
+const consultarProntuario: ActionHandler = async (session, input) => {
+  const data = await loadData();
+  const patientQuery = String(input.patientId || input.patientName || session.patientId || session.contactName || "").toLowerCase();
+  if (!patientQuery) return { success: false, output: {}, message: "Paciente nao informado para consulta do prontuario" };
+
+  let patient = data.patients.find(p => p.id === patientQuery);
+  if (!patient) {
+    patient = data.patients.find(p => normalize(p.fullName).includes(normalize(patientQuery)));
+  }
+  if (!patient) return { success: false, output: {}, message: "Paciente nao encontrado" };
+
+  const record = data.medicalRecords[patient.id];
+  if (!record) return { success: false, output: { patient: { id: patient.id, name: patient.fullName }, record: null }, message: "Prontuario vazio para este paciente" };
+
+  return {
+    success: true,
+    output: {
+      patient: { id: patient.id, name: patient.fullName, phone: patient.phone },
+      record: {
+        bloodType: record.bloodType,
+        allergies: record.allergies,
+        medications: record.medications,
+        chronicDiseases: record.chronicDiseases,
+        lastEntry: record.entries?.[0] || null,
+        entryCount: record.entries?.length || 0,
+      }
+    },
+    message: `Prontuario de ${patient.fullName}: ${record.entries?.length || 0} registro(s)`
+  };
+};
+
+const consultarFinanceiro: ActionHandler = async (session, input) => {
+  const data = await loadData();
+  const patientQuery = String(input.patientId || input.patientName || session.patientId || session.contactName || "").toLowerCase();
+
+  let patient = data.patients.find(p => p.id === patientQuery);
+  if (!patient) {
+    patient = data.patients.find(p => normalize(p.fullName).includes(normalize(patientQuery)));
+  }
+
+  const totalReceitas = data.financeTransactions.filter(t => t.type === "receita").reduce((s, t) => s + t.value, 0);
+  const totalDespesas = data.financeTransactions.filter(t => t.type === "despesa").reduce((s, t) => s + t.value, 0);
+  const totalPendente = data.appointments.filter(a => a.paymentStatus === "pending").length;
+  const totalPago = data.appointments.filter(a => a.paymentStatus === "paid").length;
+
+  let patientDebt = 0;
+  let patientAppointments: any[] = [];
+  if (patient) {
+    patientAppointments = data.appointments.filter(a => {
+      const aPatient = data.patients.find(p => p.fullName.toUpperCase() === a.patientName.toUpperCase());
+      return aPatient?.id === patient.id;
+    });
+    patientDebt = patientAppointments.filter(a => a.paymentStatus === "pending").length;
+  }
+
+  return {
+    success: true,
+    output: {
+      summary: { totalReceitas, totalDespesas, saldo: totalReceitas - totalDespesas, pendentes: totalPendente, pagos: totalPago },
+      patient: patient ? { id: patient.id, name: patient.fullName, debt: patientDebt, appointments: patientAppointments.length } : null,
+    },
+    message: `Financeiro: R$ ${(totalReceitas - totalDespesas).toFixed(2)} de saldo | ${totalPendente} consultas pendentes`
+  };
+};
+
+const enviarOrcamento: ActionHandler = async (session, input) => {
+  const data = await loadData();
+  const procedure = String(input.procedure || input.servico || input.procedimento || "");
+  const doctorId = String(input.doctorId || session.context.doctorId || "");
+
+  if (!procedure) return { success: false, output: {}, message: "Informe o procedimento para orcamento" };
+
+  const price = data.servicePrices.find(p => normalize(p.name).includes(normalize(procedure)) || normalize(procedure).includes(normalize(p.name)));
+  const doctor = doctorId ? data.doctors.find(d => d.id === doctorId) : null;
+
+  const priceValue = price?.value || 0;
+  const message = `Orçamento:\nProcedimento: ${price?.name || procedure}\nValor: R$ ${priceValue.toFixed(2)}\n${doctor ? `Profissional: ${doctor.name}\n` : ""}Formas de pagamento: Dinheiro, Cartão, Pix\n\nDeseja agendar?`;
+
+  return {
+    success: true,
+    output: {
+      procedure: price?.name || procedure,
+      value: priceValue,
+      doctor: doctor ? { id: doctor.id, name: doctor.name } : null,
+      message,
+    },
+    message: `Orçamento para ${price?.name || procedure}: R$ ${priceValue.toFixed(2)}`
+  };
+};
+
+const consultarPacienteCompleto: ActionHandler = async (session, input) => {
+  const data = await loadData();
+  const query = String(input.query || input.name || input.phone || session.patientId || session.contactName || "").toLowerCase().trim();
+  if (!query) return { success: false, output: {}, message: "Informe nome ou telefone do paciente" };
+
+  let patient = data.patients.find(p => p.id === query);
+  if (!patient) {
+    patient = data.patients.find(p =>
+      normalize(p.fullName).includes(normalize(query)) ||
+      p.phone.replace(/\D/g, "").includes(query.replace(/\D/g, ""))
+    );
+  }
+  if (!patient) return { success: false, output: {}, message: "Paciente nao encontrado" };
+
+  const record = data.medicalRecords[patient.id];
+  const appointments = data.appointments.filter(a => {
+    const aPatient = data.patients.find(p => p.fullName.toUpperCase() === a.patientName.toUpperCase());
+    return aPatient?.id === patient.id;
+  });
+  const lastAppointment = appointments.sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+
+  return {
+    success: true,
+    output: {
+      patient: {
+        id: patient.id, name: patient.fullName, phone: patient.phone, email: patient.email,
+        birthDate: patient.birthDate, healthPlan: patient.healthPlan,
+      },
+      record: record ? {
+        bloodType: record.bloodType, allergies: record.allergies,
+        medications: record.medications, chronicDiseases: record.chronicDiseases,
+        entries: record.entries?.length || 0,
+      } : null,
+      appointments: {
+        total: appointments.length,
+        lastDate: lastAppointment?.date || null,
+        lastDoctor: lastAppointment ? data.doctors.find(d => d.id === lastAppointment.doctorId)?.name : null,
+        nextAppointment: appointments.find(a => a.status === "agendado" || a.status === "confirmado") || null,
+      },
+      historySummary: appointments.map(a => ({
+        date: a.date, doctor: data.doctors.find(d => d.id === a.doctorId)?.name, status: a.status
+      })),
+    },
+    message: `Paciente ${patient.fullName}: ${appointments.length} consultas | ${record?.entries?.length || 0} registros`
+  };
+};
+
 const actionHandlers: Record<AgentActionType, ActionHandler> = {
   qualificar_lead: qualificarLead,
   criar_lead: criarLead,
@@ -591,6 +728,10 @@ const actionHandlers: Record<AgentActionType, ActionHandler> = {
   criar_tarefa: criarTarefa,
   avaliar_disponibilidade: avaliarDisponibilidade,
   responder_pergunta: responderPergunta,
+  consultar_prontuario: consultarProntuario,
+  consultar_financeiro: consultarFinanceiro,
+  enviar_orcamento: enviarOrcamento,
+  consultar_paciente_completo: consultarPacienteCompleto,
 };
 
 export async function executeAction(
@@ -628,6 +769,10 @@ export function getActionLabel(type: AgentActionType): string {
     criar_tarefa: "Criar Tarefa",
     avaliar_disponibilidade: "Avaliar Disponibilidade",
     responder_pergunta: "Responder Pergunta",
+    consultar_prontuario: "Consultar Prontuario",
+    consultar_financeiro: "Consultar Financeiro",
+    enviar_orcamento: "Enviar Orcamento",
+    consultar_paciente_completo: "Consultar Paciente Completo",
   };
   return labels[type] || type;
 }
