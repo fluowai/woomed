@@ -27,11 +27,11 @@ import {
   ReportsModule,
   TissModule
 } from './components/ExpansionModules';
-import { AgentPipelineDashboard, SdrPipeline, AgentConversations, AgentMetricsView } from './components/AgentModules';
+import { AgentPipelineDashboard, SdrPipeline, AgentConversations, AgentMetricsView, FollowUpManagement } from './components/AgentModules';
 import CrmModule from './components/CrmModule';
 import NpsLgpdModule from './components/NpsLgpdModule';
 import AutomationModule from './components/AutomationModule';
-import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles, LayoutDashboard, TrendingUp, Smartphone, Bot, Users, DollarSign, Megaphone, FileText, Package, BarChart3, ClipboardList, UsersRound, HelpCircle, Zap } from 'lucide-react';
+import { MessageSquareText, Plus, Calendar, Clock, User, Stethoscope, Sparkles, LayoutDashboard, TrendingUp, Smartphone, Bot, Users, DollarSign, Megaphone, FileText, Package, BarChart3, ClipboardList, UsersRound, HelpCircle, Zap, Send } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, BootstrapState } from './api';
 import { ToastProvider, ToastListener, showToast } from './components/Toast';
@@ -764,6 +764,8 @@ export default function App() {
         return <AgentConversations />;
       case 'Métricas Agentes':
         return <AgentMetricsView />;
+      case 'Follow-ups':
+        return <FollowUpManagement />;
       case 'LLMs':
         return (
           <LlmSettingsModule
@@ -933,6 +935,7 @@ export default function App() {
                 { icon: ClipboardList, label: 'NPS & LGPD', view: 'NPS & LGPD' as ViewType },
                 { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' as ViewType },
                 { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' as ViewType },
+                { icon: Send, label: 'Follow-ups', view: 'Follow-ups' as ViewType },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.view;

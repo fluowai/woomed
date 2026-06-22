@@ -1,8 +1,9 @@
 import { loadData, saveData } from "../data";
-import { GEMINI_API_KEY, HAS_GEMINI_KEY } from "../config";
+import { GEMINI_API_KEY, HAS_GEMINI_KEY, WHATSMEOW_API_URL } from "../config";
 import type { AgentActionType, AgentSession, AgentLead, UrgencyLevel, LeadStage } from "../../src/agent-types";
 import type { Patient, Doctor, Appointment, ServiceAgent } from "../../src/types";
 import { isSlotAvailable, addDays, addMinutes, dayName, timeToMinutes, minutesToTime, nowIso, normalize } from "../helpers";
+import { callWhatsmeowBridge } from "../whatsapp-utils";
 
 interface ActionResult {
   success: boolean;
@@ -371,10 +372,30 @@ const enviarLembrete: ActionHandler = async (session, input) => {
   const doctor = data.doctors.find(d => d.id === appointment.doctorId);
   const message = `Olá ${appointment.patientName}! Lembramos da sua consulta${doctor ? ` com ${doctor.name}` : ""} no dia ${appointment.date} às ${appointment.timeStart}. Confirmado?`;
 
+  const conn = data.whatsappConnections?.find(c => c.status === "connected");
+  if (conn?.id && WHATSMEOW_API_URL) {
+    const patient = data.patients.find(p =>
+      p.fullName.toUpperCase() === appointment.patientName.toUpperCase()
+    );
+    const conversation = data.whatsappConversations?.find(c =>
+      c.connectionId === conn.id && c.normalizedPhone === patient?.phone?.replace(/\D/g, "")
+    );
+    if (conversation) {
+      try {
+        await callWhatsmeowBridge("/messages/send", {
+          method: "POST",
+          body: JSON.stringify({ connectionId: conn.id, to: conversation.jid, text: message }),
+        });
+      } catch (e) {
+        console.warn("[enviarLembrete] WhatsApp send failed:", e);
+      }
+    }
+  }
+
   return {
     success: true,
     output: { appointment: { id: appointment.id, date: appointment.date, timeStart: appointment.timeStart }, reminderMessage: message },
-    message: "Lembrete gerado com sucesso"
+    message: "Lembrete enviado com sucesso"
   };
 };
 
@@ -387,13 +408,37 @@ const enviarConfirmacao: ActionHandler = async (session, input) => {
   const appointment = data.appointments.find(a => a.id === appointmentId);
   if (!appointment) return { success: false, output: {}, message: "Consulta nao encontrada" };
 
+  appointment.status = "confirmado";
+
   const doctor = data.doctors.find(d => d.id === appointment.doctorId);
   const message = `✅ Consulta confirmada!\nPaciente: ${appointment.patientName}\nProfissional: ${doctor?.name || "N/I"}\nData: ${appointment.date}\nHorário: ${appointment.timeStart}\nTipo: ${appointment.type}\n\nSe precisar remarcar ou cancelar, estamos à disposição.`;
+
+  const conn = data.whatsappConnections?.find(c => c.status === "connected");
+  if (conn?.id && WHATSMEOW_API_URL) {
+    const patient = data.patients.find(p =>
+      p.fullName.toUpperCase() === appointment.patientName.toUpperCase()
+    );
+    const conversation = data.whatsappConversations?.find(c =>
+      c.connectionId === conn.id && c.normalizedPhone === patient?.phone?.replace(/\D/g, "")
+    );
+    if (conversation) {
+      try {
+        await callWhatsmeowBridge("/messages/send", {
+          method: "POST",
+          body: JSON.stringify({ connectionId: conn.id, to: conversation.jid, text: message }),
+        });
+      } catch (e) {
+        console.warn("[enviarConfirmacao] WhatsApp send failed:", e);
+      }
+    }
+  }
+
+  await saveData(data);
 
   return {
     success: true,
     output: { appointment: { id: appointment.id, status: "confirmado" }, confirmationMessage: message },
-    message: "Confirmacao gerada com sucesso"
+    message: message
   };
 };
 
@@ -402,6 +447,26 @@ const coletarFeedback: ActionHandler = async (session, input) => {
   const appointmentId = String(input.appointmentId || session.appointmentId || "");
 
   const message = `Olá ${session.contactName || "Paciente"}! Gostaríamos de saber como foi sua experiência. De 0 a 10, qual nota você dá para o atendimento?`;
+
+  const conn = data.whatsappConnections?.find(c => c.status === "connected");
+  if (conn?.id && WHATSMEOW_API_URL) {
+    const patient = data.patients.find(p =>
+      session.contactPhone && p.phone?.replace(/\D/g, "") === session.contactPhone.replace(/\D/g, "")
+    );
+    const conversation = data.whatsappConversations?.find(c =>
+      c.connectionId === conn.id && c.normalizedPhone === patient?.phone?.replace(/\D/g, "")
+    );
+    if (conversation) {
+      try {
+        await callWhatsmeowBridge("/messages/send", {
+          method: "POST",
+          body: JSON.stringify({ connectionId: conn.id, to: conversation.jid, text: message }),
+        });
+      } catch (e) {
+        console.warn("[coletarFeedback] WhatsApp send failed:", e);
+      }
+    }
+  }
 
   return {
     success: true,

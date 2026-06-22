@@ -29,11 +29,12 @@ import {
   TrendingUp,
   ThumbsUp,
   Shield,
-  Zap
+  Zap,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ViewType } from '../App';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const mainNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' as ViewType },
@@ -57,6 +58,7 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   { icon: ListTodo, label: 'Pipeline SDR', view: 'Pipeline SDR' },
   { icon: MessageSquareText, label: 'Conversas', view: 'Conversas Agentes' },
   { icon: PieChart, label: 'Métricas', view: 'Métricas Agentes' },
+  { icon: Send, label: 'Follow-ups', view: 'Follow-ups' },
   { icon: DatabaseZap, label: 'Neural', view: 'Neural' },
   { icon: Calendar, label: 'Agenda', view: 'Agenda' },
   { icon: ClipboardList, label: 'Prontuários', view: 'Prontuários' },
@@ -85,6 +87,20 @@ interface SidebarProps {
 export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole }: SidebarProps) {
   const navItems = allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [pendingFollowUps, setPendingFollowUps] = useState(0);
+
+  useEffect(() => {
+    const token = localStorage.getItem('consultio_token');
+    if (!token) return;
+    fetch('/api/v2/followup/queue', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => {
+        const entries = data.entries || [];
+        const due = entries.filter((e: any) => new Date(e.nextFollowUpAt) <= new Date());
+        setPendingFollowUps(due.length);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <>
@@ -121,6 +137,11 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
             >
               <item.icon size={20} className={activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
               <span className="text-sm font-medium">{item.label}</span>
+              {item.view === 'Follow-ups' && pendingFollowUps > 0 && (
+                <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingFollowUps > 99 ? '99+' : pendingFollowUps}
+                </span>
+              )}
             </motion.button>
           ))}
         </nav>

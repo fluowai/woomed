@@ -93,6 +93,8 @@ export function AgentPipelineDashboard() {
 
   const leadStages = ['novo', 'contatado', 'qualificado', 'agendando', 'agendado', 'convertido', 'perdido'];
   const totalAgents = metrics.length;
+  const totalLeadsFromMetrics = metrics.reduce((a, m) => a + m.leadsCreated, 0);
+  const totalAppointmentsFromMetrics = metrics.reduce((a, m) => a + m.appointmentsBooked, 0);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
@@ -107,7 +109,7 @@ export function AgentPipelineDashboard() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <div className="p-2.5 bg-blue-50 rounded-xl"><Users className="w-5 h-5 text-blue-600" /></div>
@@ -135,6 +137,14 @@ export function AgentPipelineDashboard() {
               <span className="text-sm font-medium text-slate-500">Agentes</span>
             </div>
             <p className="text-3xl font-bold text-slate-800">{totalAgents}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2.5 bg-emerald-50 rounded-xl"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
+              <span className="text-sm font-medium text-slate-500">Conversao</span>
+            </div>
+            <p className="text-3xl font-bold text-slate-800">{totalLeadsFromMetrics > 0 ? ((totalAppointmentsFromMetrics / totalLeadsFromMetrics) * 100).toFixed(0) : 0}%</p>
+            <p className="text-[10px] text-slate-400 mt-1">{totalAppointmentsFromMetrics} consultas / {totalLeadsFromMetrics} leads</p>
           </div>
         </div>
 
@@ -460,6 +470,163 @@ export function AgentConversations() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// === Follow-up Management ===
+export function FollowUpManagement() {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStage, setFilterStage] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiGet<{ entries: any[]; count: number }>('/api/v2/followup/queue', token());
+      setEntries(data.entries);
+    } catch (e) { console.error('FollowUp load error:', e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleUnregister = async (sessionId: string) => {
+    try {
+      await apiPost(`/api/v2/followup/unregister/${sessionId}`, token());
+      setEntries(prev => prev.filter(e => e.sessionId !== sessionId));
+    } catch (e) { console.error('Unregister error:', e); }
+  };
+
+  const handleReschedule = async (sessionId: string, hours: number) => {
+    try {
+      const nextDate = new Date();
+      nextDate.setHours(nextDate.getHours() + hours);
+      await apiPatch(`/api/v2/followup/entry/${sessionId}`, token(), {
+        nextFollowUpAt: nextDate.toISOString(),
+      });
+      load();
+    } catch (e) { console.error('Reschedule error:', e); }
+  };
+
+  const filteredEntries = entries.filter(e => !filterStage || e.stage === filterStage);
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center bg-slate-50">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    </div>
+  );
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Gestao de Follow-ups</h2>
+            <p className="text-sm text-slate-500">{entries.length} follow-up(s) agendados</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select value={filterStage} onChange={e => setFilterStage(e.target.value)}
+              className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">Todos os estagios</option>
+              <option value="novo">Novo</option>
+              <option value="qualificado">Qualificado</option>
+              <option value="agendando">Agendando</option>
+              <option value="agendado">Agendado</option>
+            </select>
+            <button onClick={load} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-medium transition-colors">
+              <RefreshCw size={16} /> Atualizar
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1"><Timer className="w-4 h-4 text-blue-500" /><span className="text-xs font-medium text-slate-500">Pendentes</span></div>
+            <p className="text-2xl font-bold text-slate-800">{entries.filter(e => new Date(e.nextFollowUpAt) <= new Date()).length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-amber-500" /><span className="text-xs font-medium text-slate-500">Agendados</span></div>
+            <p className="text-2xl font-bold text-slate-800">{entries.filter(e => new Date(e.nextFollowUpAt) > new Date()).length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1"><Send className="w-4 h-4 text-green-500" /><span className="text-xs font-medium text-slate-500">Envios</span></div>
+            <p className="text-2xl font-bold text-slate-800">{entries.reduce((a, e) => a + (e.followUpCount || 0), 0)}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/50">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-500">Contato</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-500">Estagio</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-500">Canal</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-500">Envios</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-500">Proximo</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-500">Ultimo Contato</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-500">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEntries.map(entry => {
+                  const isDue = new Date(entry.nextFollowUpAt) <= new Date();
+                  return (
+                    <tr key={entry.sessionId} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-slate-800">{entry.contactName}</div>
+                        <div className="text-xs text-slate-400">{entry.contactPhone}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stageColors[entry.stage] || 'bg-slate-100 text-slate-700'}`}>
+                          {stageLabels[entry.stage] || entry.stage}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">{entry.channel}</td>
+                      <td className="text-center py-3 px-4">
+                        <span className="text-xs font-bold text-slate-700">{entry.followUpCount}x</span>
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <span className={`text-xs font-medium ${isDue ? 'text-rose-600' : 'text-slate-600'}`}>
+                          {isDue ? 'VENcido' : new Date(entry.nextFollowUpAt).toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="text-center py-3 px-4 text-xs text-slate-500">
+                        {new Date(entry.lastContactAt).toLocaleString()}
+                      </td>
+                      <td className="text-right py-3 px-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => handleReschedule(entry.sessionId, 1)}
+                            className="text-xs font-medium px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors" title="Reagendar +1h">
+                            +1h
+                          </button>
+                          <button onClick={() => handleReschedule(entry.sessionId, 24)}
+                            className="text-xs font-medium px-2 py-1 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors" title="Reagendar +24h">
+                            +24h
+                          </button>
+                          <button onClick={() => handleUnregister(entry.sessionId)}
+                            className="text-xs font-medium px-2 py-1 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors" title="Remover follow-up">
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredEntries.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12">
+                      <Send className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-sm text-slate-500">Nenhum follow-up encontrado</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

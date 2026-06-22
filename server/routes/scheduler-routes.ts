@@ -1,6 +1,6 @@
 import { Express } from "express";
 import { AuthedRequest, requireAuth, requireRoles } from "../middleware";
-import { loadData } from "../data";
+import { loadData, saveData } from "../data";
 import {
   getSchedulerStatus, generateAndScheduleReminders, scheduleReminder, startScheduler, stopScheduler
 } from "../modules/scheduler";
@@ -55,12 +55,52 @@ export function registerSchedulerRoutes(app: Express) {
   app.get("/api/v2/followup/queue", requireAuth, async (_req, res) => {
     const data = await loadData();
     const fu = (data as any).__followUp || { entries: [] };
-    res.json({ entries: fu.entries, count: fu.entries.length });
+    const rt = (data as any).__agentRuntime || { sessions: [], leads: [] };
+    const enriched = fu.entries.map((e: any) => {
+      const session = rt.sessions.find((s: any) => s.id === e.sessionId);
+      const lead = rt.leads.find((l: any) => l.sessionId === e.sessionId);
+      return { ...e, session, lead };
+    });
+    res.json({ entries: enriched, count: enriched.length });
   });
 
   app.post("/api/v2/followup/unregister/:sessionId", requireAuth, async (req, res) => {
     const { unregisterFromFollowUp } = await import("../modules/followup");
     await unregisterFromFollowUp(req.params.sessionId);
     res.json({ ok: true });
+  });
+
+  app.post("/api/v2/followup/register", requireAuth, async (req: AuthedRequest, res) => {
+    const { registerForFollowUp } = await import("../modules/followup");
+    const data = await loadData();
+    const { sessionId } = req.body || {};
+    if (!sessionId) return res.status(400).json({ error: "sessionId obrigatorio" });
+    const rt = (data as any).__agentRuntime || { sessions: [] };
+    const session = rt.sessions.find((s: any) => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: "Sessao nao encontrada" });
+    await registerForFollowUp(session);
+    res.json({ ok: true, message: "Follow-up registrado manualmente" });
+  });
+
+  app.post("/api/v2/followup/process-now", requireAuth, requireRoles("admin"), async (_req, res) => {
+    await findAbandonedSessions();
+    await checkFollowUps();
+    const data = await loadData();
+    const fu = (data as any).__followUp || { entries: [] };
+    res.json({ ok: true, entriesProcessed: fu.entries.length, message: "Follow-ups processados" });
+  });
+
+  app.patch("/api/v2/followup/entry/:sessionId", requireAuth, async (req, res) => {
+    const data = await loadData();
+    const fu = (data as any).__followUp || { entries: [] };
+    const idx = fu.entries.findIndex((e: any) => e.sessionId === req.params.sessionId);
+    if (idx === -1) return res.status(404).json({ error: "Entry not found" });
+    const allowed = ["nextFollowUpAt", "followUpCount", "stage"];
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) fu.entries[idx][field] = req.body[field];
+    }
+    (data as any).__followUp = fu;
+    await saveData(data);
+    res.json({ entry: fu.entries[idx] });
   });
 }
