@@ -12,6 +12,7 @@ import ChatAssistant from './components/ChatAssistant';
 import Dashboard from './components/Dashboard';
 import Financeiro from './components/Financeiro';
 import Login from './components/Login';
+import SetupWizard from './components/SetupWizard';
 import SaaSAdmin from './components/SaaSAdmin';
 import { WhatsAppConnections, WhatsAppInbox } from './components/WhatsApp';
 import {
@@ -83,6 +84,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -198,7 +200,17 @@ export default function App() {
 
   useEffect(() => {
     if (!authToken) {
-      setIsBootstrapping(false);
+      fetch('/api/v2/setup/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data.needsSetup) {
+            setNeedsSetup(true);
+            setIsBootstrapping(false);
+          } else {
+            setIsBootstrapping(false);
+          }
+        })
+        .catch(() => setIsBootstrapping(false));
       return;
     }
 
@@ -217,6 +229,17 @@ export default function App() {
     setAuthToken(token);
     setCurrentUser(user);
     applyBootstrapState(state);
+  };
+
+  const handleSetupComplete = async (token: string, user: { id: string; name: string; role: string }) => {
+    localStorage.setItem('consultio_token', token);
+    setAuthToken(token);
+    setCurrentUser(user as AppUser);
+    setNeedsSetup(false);
+    try {
+      const state = await apiGet<BootstrapState>('/api/bootstrap', token);
+      applyBootstrapState(state);
+    } catch { }
   };
 
   const handleLogout = () => {
@@ -880,6 +903,9 @@ export default function App() {
   }
 
   if (!authToken || !currentUser) {
+    if (needsSetup) {
+      return <SetupWizard onComplete={handleSetupComplete} />;
+    }
     return (
       <>
         {bootstrapError && (

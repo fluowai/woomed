@@ -15,6 +15,7 @@ import { registerAgentRoutes } from "./server/routes/agents-v2";
 import { registerSaaSRoutes } from "./server/routes/saas";
 import { registerCrmRoutes } from "./server/routes/crm";
 import { registerModules360Routes } from "./server/routes/modules-360";
+import { registerSetupRoutes } from "./server/routes/setup";
 import { scheduleAutoBackup } from "./server/backup";
 import { startBridge, stopBridge } from "./server/whatsmeow-bridge-manager";
 import { startScheduler } from "./server/modules/scheduler";
@@ -72,6 +73,9 @@ async function startServer() {
     });
     next();
   });
+
+  // Setup routes (unauthenticated, no rate limit)
+  registerSetupRoutes(app);
 
   // Rate limiting
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "Muitas tentativas de login. Tente novamente em 15 minutos." }, standardHeaders: true, legacyHeaders: false });

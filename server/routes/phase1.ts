@@ -80,10 +80,15 @@ async function saveUserPassword(userId: string, passwordHash: string) {
 export function registerPhase1Routes(app: Express) {
   // === AUTH (JWT) ===
   app.post("/api/v2/auth/login", async (req, res) => {
+    const data = await loadData();
+    const hasSuperAdmin = data.users.some(u => u.role === "super_admin" && u.isActive !== false);
+    if (!hasSuperAdmin) {
+      return res.status(400).json({ error: "Nenhum super admin configurado. Complete o setup primeiro.", code: "SETUP_REQUIRED" });
+    }
+
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: "Email e senha obrigatorios." });
 
-    const data = await loadData();
     const dbRow = await findUserByEmail(email);
 
     if (!dbRow || !((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
