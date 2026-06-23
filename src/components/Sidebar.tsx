@@ -81,10 +81,17 @@ interface SidebarProps {
   onViewChange: (view: ViewType) => void;
   onNewAppointment: () => void;
   userRole?: string;
+  userTenantId?: string;
 }
 
-export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole }: SidebarProps) {
-  const navItems = allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
+export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId }: SidebarProps) {
+  const isPlatformAdmin = userRole === 'super_admin' && !userTenantId;
+  const navItems = isPlatformAdmin
+    ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType, superAdminOnly: true }]
+    : allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
+  const mobileMainNavItems = isPlatformAdmin
+    ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType }]
+    : mainNavItems;
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [pendingFollowUps, setPendingFollowUps] = useState(0);
 
@@ -105,7 +112,7 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col h-screen sticky top-0 overflow-y-auto">
-        <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange('Dashboard')}>
+        <div className="p-6 flex items-center gap-3 cursor-pointer" onClick={() => onViewChange(isPlatformAdmin ? 'Painel SaaS' : 'Dashboard')}>
           <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
             <Stethoscope className="text-white w-6 h-6" />
           </div>
@@ -149,7 +156,7 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
       {/* Mobile Bottom Tab Bar */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 safe-area-bottom">
         <div className="flex items-center justify-around h-16 px-1">
-          {mainNavItems.map((item) => {
+          {mobileMainNavItems.map((item) => {
             const isActive = activeView === item.view;
             const Icon = item.icon;
             return (
@@ -170,7 +177,7 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
           <button
             onClick={() => setIsMoreOpen(true)}
             className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-xl transition-colors min-w-0 flex-1 ${
-              isMoreOpen || (mainNavItems.every(i => i.view !== activeView) && activeView !== '') ? 'text-teal-600' : 'text-slate-400'
+              isMoreOpen || (mobileMainNavItems.every(i => i.view !== activeView) && activeView !== '') ? 'text-teal-600' : 'text-slate-400'
             }`}
           >
             <MoreHorizontal size={22} />
@@ -204,7 +211,7 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
                 </button>
               </div>
               <div className="p-4 grid grid-cols-4 gap-2">
-                {navItems.filter(item => !mainNavItems.some(m => m.view === item.view)).map((item) => {
+                {navItems.filter(item => !mobileMainNavItems.some(m => m.view === item.view)).map((item) => {
                   const Icon = item.icon;
                   const isActive = activeView === item.view;
                   return (

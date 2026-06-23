@@ -88,6 +88,7 @@ export default function App() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [showClinicOnboarding, setShowClinicOnboarding] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
+  const [platformReturnToken, setPlatformReturnToken] = useState<string | null>(() => localStorage.getItem('consultio_platform_token'));
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
@@ -198,6 +199,9 @@ export default function App() {
     setProfessionalRooms(state.professionalRooms || []);
     setPatientPortalLogins(state.patientPortalLogins || []);
     setPatientSatisfactionRatings(state.patientSatisfactionRatings || []);
+    if (state.user.role === 'super_admin' && !state.user.tenantId) {
+      setActiveView('Painel SaaS');
+    }
   };
 
   useEffect(() => {
@@ -253,6 +257,47 @@ export default function App() {
     setAuthToken(null);
     setCurrentUser(null);
     setActiveView('Dashboard');
+    setPlatformReturnToken(null);
+    localStorage.removeItem('consultio_platform_token');
+  };
+
+  const handleAccessTenant = async (tenant: Tenant) => {
+    if (!authToken) return;
+    try {
+      const response = await apiPost<{ token: string; user: AppUser; state: BootstrapState }>(
+        `/api/v2/saas/tenants/${tenant.id}/access`,
+        authToken
+      );
+      localStorage.setItem('consultio_platform_token', authToken);
+      localStorage.setItem('consultio_token', response.token);
+      setPlatformReturnToken(authToken);
+      setAuthToken(response.token);
+      setCurrentUser(response.user);
+      applyBootstrapState(response.state);
+      setActiveView('Dashboard');
+      showToast('success', `Acessando painel da clinica ${tenant.tradeName}.`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao acessar painel da clinica.');
+    }
+  };
+
+  const handleReturnToPlatform = async () => {
+    if (!platformReturnToken) return;
+    try {
+      const state = await apiGet<BootstrapState>('/api/bootstrap', platformReturnToken);
+      localStorage.setItem('consultio_token', platformReturnToken);
+      localStorage.removeItem('consultio_platform_token');
+      setAuthToken(platformReturnToken);
+      setPlatformReturnToken(null);
+      setCurrentUser(state.user);
+      applyBootstrapState(state);
+      setActiveView('Painel SaaS');
+      showToast('success', 'Voce voltou ao painel SaaS.');
+    } catch (error) {
+      localStorage.removeItem('consultio_platform_token');
+      setPlatformReturnToken(null);
+      showToast('error', error instanceof Error ? error.message : 'Nao foi possivel voltar ao painel SaaS.');
+    }
   };
 
   const selectedDoctor = useMemo(() => doctors.find(d => d.id === selectedDoctorId), [selectedDoctorId, doctors]);
@@ -705,6 +750,7 @@ export default function App() {
             token={authToken}
             tenants={tenants}
             plans={plans}
+            onAccessTenant={handleAccessTenant}
             onRefresh={async () => {
               try {
                 const state = await apiGet<BootstrapState>('/api/bootstrap', authToken);
@@ -930,6 +976,30 @@ export default function App() {
     );
   }
 
+  const isPlatformAdmin = currentUser.role === 'super_admin' && !currentUser.tenantId;
+  const mobileSidebarItems = isPlatformAdmin
+    ? [{ icon: LayoutDashboard, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType }]
+    : [
+        { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' as ViewType },
+        { icon: Calendar, label: 'Agenda', view: 'Agenda' as ViewType },
+        { icon: TrendingUp, label: 'CRM 360', view: 'CRM 360' as ViewType },
+        { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' as ViewType },
+        { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' as ViewType },
+        { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' as ViewType },
+        { icon: Calendar, label: 'Prontuários', view: 'Prontuários' as ViewType },
+        { icon: Users, label: 'Pacientes', view: 'Pacientes' as ViewType },
+        { icon: DollarSign, label: 'Financeiro', view: 'Financeiro' as ViewType },
+        { icon: Megaphone, label: 'Marketing', view: 'Marketing' as ViewType },
+        { icon: FileText, label: 'TISS', view: 'TISS' as ViewType },
+        { icon: Package, label: 'Estoques', view: 'Estoques' as ViewType },
+        { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' as ViewType },
+        { icon: Zap, label: 'Automação', view: 'Automação' as ViewType },
+        { icon: ClipboardList, label: 'NPS & LGPD', view: 'NPS & LGPD' as ViewType },
+        { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' as ViewType },
+        { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' as ViewType },
+        { icon: Send, label: 'Follow-ups', view: 'Follow-ups' as ViewType },
+      ];
+
   return (
     <ToastProvider>
       <ToastListener />
@@ -938,7 +1008,7 @@ export default function App() {
       <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
         setActiveView(view);
         setIsSidebarOpen(false);
-      }} userRole={currentUser?.role} />
+      }} userRole={currentUser?.role} userTenantId={currentUser?.tenantId} />
       
       {/* Mobile sidebar overlay */}
       {isSidebarOpen && (
@@ -948,33 +1018,14 @@ export default function App() {
             onClick={() => setIsSidebarOpen(false)}
           />
           <div className="relative w-72 bg-white h-full shadow-2xl overflow-y-auto p-4 animate-slide-up">
-            <div className="flex items-center gap-3 p-2 mb-4" onClick={() => { setActiveView('Dashboard'); setIsSidebarOpen(false); }}>
+            <div className="flex items-center gap-3 p-2 mb-4" onClick={() => { setActiveView(isPlatformAdmin ? 'Painel SaaS' : 'Dashboard'); setIsSidebarOpen(false); }}>
               <div className="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center">
                 <Stethoscope className="text-white w-5 h-5" />
               </div>
               <span className="text-lg font-bold text-teal-900 tracking-tight">Consultio Med</span>
             </div>
             <div className="space-y-1">
-              {[
-                { icon: LayoutDashboard, label: 'Dashboard', view: 'Dashboard' as ViewType },
-                { icon: Calendar, label: 'Agenda', view: 'Agenda' as ViewType },
-                { icon: TrendingUp, label: 'CRM 360', view: 'CRM 360' as ViewType },
-                { icon: MessageSquareText, label: 'Mensagens', view: 'Mensagens' as ViewType },
-                { icon: Smartphone, label: 'Conexoes', view: 'Conexoes' as ViewType },
-                { icon: Bot, label: 'Assistente IA', view: 'Assistente IA' as ViewType },
-                { icon: Calendar, label: 'Prontuários', view: 'Prontuários' as ViewType },
-                { icon: Users, label: 'Pacientes', view: 'Pacientes' as ViewType },
-                { icon: DollarSign, label: 'Financeiro', view: 'Financeiro' as ViewType },
-                { icon: Megaphone, label: 'Marketing', view: 'Marketing' as ViewType },
-                { icon: FileText, label: 'TISS', view: 'TISS' as ViewType },
-                { icon: Package, label: 'Estoques', view: 'Estoques' as ViewType },
-                { icon: BarChart3, label: 'Relatórios', view: 'Relatórios' as ViewType },
-                { icon: Zap, label: 'Automação', view: 'Automação' as ViewType },
-                { icon: ClipboardList, label: 'NPS & LGPD', view: 'NPS & LGPD' as ViewType },
-                { icon: UsersRound, label: 'Indique e ganhe', view: 'Indique e ganhe' as ViewType },
-                { icon: HelpCircle, label: 'Ajuda', view: 'Ajuda' as ViewType },
-                { icon: Send, label: 'Follow-ups', view: 'Follow-ups' as ViewType },
-              ].map((item) => {
+              {mobileSidebarItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.view;
                 return (
@@ -1008,12 +1059,13 @@ export default function App() {
           onNewAppointment={() => setIsSchedulingOpen(true)}
           currentUser={currentUser}
           onLogout={handleLogout}
+          onReturnToPlatform={platformReturnToken ? handleReturnToPlatform : undefined}
         />
         
         {renderView()}
 
         {/* Floating Action Buttons */}
-        {!['Mensagens', 'Conexoes', 'Assistente IA', 'Conversas Agentes'].includes(activeView) && (
+        {!isPlatformAdmin && !['Mensagens', 'Conexoes', 'Assistente IA', 'Conversas Agentes'].includes(activeView) && (
           <div className="fixed bottom-20 right-4 md:bottom-10 md:right-10 flex flex-col gap-3 z-30 lg:bottom-10">
             <button 
               onClick={() => setIsSchedulingOpen(true)}
@@ -1034,7 +1086,7 @@ export default function App() {
         )}
 
         {/* Simplified Scheduling Modal */}
-        {isSchedulingOpen && (
+        {!isPlatformAdmin && isSchedulingOpen && (
           <div 
             onClick={() => setIsSchedulingOpen(false)}
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 overflow-y-auto"

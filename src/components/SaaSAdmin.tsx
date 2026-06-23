@@ -16,6 +16,7 @@ interface SaaSAdminProps {
   tenants: Tenant[];
   plans: SaaSPlan[];
   onRefresh: () => void;
+  onAccessTenant: (tenant: Tenant) => void;
 }
 
 interface TenantsResponse {
@@ -38,7 +39,7 @@ interface StatsResponse {
   recentActivity: { title: string; desc: string; time: string }[];
 }
 
-export default function SaaSAdmin({ token, tenants, plans, onRefresh }: SaaSAdminProps) {
+export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTenant }: SaaSAdminProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'plans' | 'settings'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<StatsResponse['stats'] | null>(null);
@@ -408,6 +409,10 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh }: SaaSAdmi
                           </td>
                           <td className="p-5 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => onAccessTenant(tenant)} title="Acessar painel da clinica" className="px-3 py-2 hover:bg-emerald-500/20 rounded-lg text-emerald-400 hover:text-emerald-300 transition-colors text-xs font-bold inline-flex items-center gap-1">
+                                <UserCog size={15} />
+                                Acessar
+                              </button>
                               <button onClick={() => openEditTenant(tenant)} title="Editar" className="p-2 hover:bg-blue-500/20 rounded-lg text-slate-400 hover:text-blue-400 transition-colors">
                                 <Edit3 size={16} />
                               </button>

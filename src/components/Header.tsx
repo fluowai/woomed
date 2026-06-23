@@ -1,4 +1,4 @@
-import { Sparkles, Bell, LogOut, ChevronDown, Plus, Menu } from 'lucide-react';
+import { Sparkles, Bell, LogOut, ChevronDown, Plus, Menu, ShieldCheck } from 'lucide-react';
 import { AppUser } from '../types';
 
 interface HeaderProps {
@@ -8,9 +8,11 @@ interface HeaderProps {
   onNewAppointment: () => void;
   currentUser: AppUser;
   onLogout: () => void;
+  onReturnToPlatform?: () => void;
 }
 
-export default function Header({ onMenuClick, activeView, currentDate, onNewAppointment, currentUser, onLogout }: HeaderProps) {
+export default function Header({ onMenuClick, activeView, currentDate, onNewAppointment, currentUser, onLogout, onReturnToPlatform }: HeaderProps) {
+  const isPlatformAdmin = currentUser.role === 'super_admin' && !currentUser.tenantId;
   
   const formatHeaderDate = (dateStr: string) => {
     const daysWeek = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
@@ -42,17 +44,31 @@ export default function Header({ onMenuClick, activeView, currentDate, onNewAppo
       </div>
 
       <div className="flex items-center gap-1 lg:gap-4 shrink-0">
-        <button className="hidden lg:flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-full font-bold text-xs shadow-sm hover:shadow-md hover:bg-teal-700 transition-all group">
-          <Sparkles size={16} className="text-teal-100 group-hover:rotate-12 transition-transform" />
-          <span>Ouvir agenda do dia</span>
-        </button>
+        {!isPlatformAdmin && (
+          <button className="hidden lg:flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-full font-bold text-xs shadow-sm hover:shadow-md hover:bg-teal-700 transition-all group">
+            <Sparkles size={16} className="text-teal-100 group-hover:rotate-12 transition-transform" />
+            <span>Ouvir agenda do dia</span>
+          </button>
+        )}
 
-        <button 
-          onClick={onNewAppointment}
-          className="lg:hidden flex items-center justify-center w-9 h-9 bg-teal-600 text-white rounded-full shadow-sm"
-        >
-          <Plus size={18} />
-        </button>
+        {onReturnToPlatform && (
+          <button
+            onClick={onReturnToPlatform}
+            className="hidden lg:flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full font-bold text-xs shadow-sm hover:bg-slate-800 transition-all"
+          >
+            <ShieldCheck size={16} />
+            <span>Voltar ao SaaS</span>
+          </button>
+        )}
+
+        {!isPlatformAdmin && (
+          <button
+            onClick={onNewAppointment}
+            className="lg:hidden flex items-center justify-center w-9 h-9 bg-teal-600 text-white rounded-full shadow-sm"
+          >
+            <Plus size={18} />
+          </button>
+        )}
 
         <div className="flex items-center gap-1 lg:gap-3 ml-1 lg:ml-3 border-l pl-2 lg:pl-4 border-slate-100">
           <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200 px-2 lg:px-3 py-1 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors group">

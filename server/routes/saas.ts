@@ -4,6 +4,8 @@ import { loadData, saveData } from "../data";
 import { AuthedRequest, requireAuth, requireRoles } from "../middleware";
 import { audit, nowIso, sanitizeUpdate } from "../helpers";
 import { Tenant, SaaSPlan, PlatformOwner } from "../../src/types";
+import { generateTokens } from "../auth";
+import { buildState } from "./index";
 
 export function registerSaaSRoutes(app: Express) {
 
@@ -65,6 +67,26 @@ export function registerSaaSRoutes(app: Express) {
     await audit(data, req.user!, "delete", "saas_tenant", removed.id, removed.tradeName);
     await saveData(data);
     res.json({ ok: true });
+  });
+
+  app.post("/api/v2/saas/tenants/:id/access", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const tenant = data.tenants.find(t => t.id === req.params.id);
+    if (!tenant) return res.status(404).json({ error: "Tenant nao encontrado." });
+    if (tenant.status === "suspended" || tenant.status === "cancelled") {
+      return res.status(400).json({ error: "Clinica suspensa ou cancelada." });
+    }
+
+    const user = {
+      id: req.user!.id,
+      name: `${req.user!.name} em ${tenant.tradeName}`,
+      role: "admin" as const,
+      tenantId: tenant.id,
+    };
+    const tokens = generateTokens(user);
+    await audit(data, req.user!, "access", "saas_tenant", tenant.id, `Acesso ao painel da clinica ${tenant.tradeName}`);
+    await saveData(data);
+    res.json({ ...tokens, user, state: buildState(data, user), tenant });
   });
 
   // ==================== PLANS ====================
