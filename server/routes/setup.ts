@@ -1,6 +1,7 @@
 import crypto from "crypto";
+import fs from "fs";
 import { Express } from "express";
-import { loadData, saveData } from "../data";
+import { loadData, saveData, dataFile, invalidateCache } from "../data";
 import { hashPassword, generateTokens } from "../auth";
 
 export function registerSetupRoutes(app: Express) {
@@ -8,6 +9,18 @@ export function registerSetupRoutes(app: Express) {
     const data = await loadData();
     const hasSuperAdmin = data.users.some(u => u.role === "super_admin" && u.isActive !== false);
     res.json({ needsSetup: !hasSuperAdmin });
+  });
+
+  app.post("/api/v2/setup/reset", async (_req, res) => {
+    try {
+      if (fs.existsSync(dataFile)) {
+        fs.unlinkSync(dataFile);
+      }
+      invalidateCache();
+      res.json({ ok: true, message: "Dados resetados. Recarregue a pagina para o onboarding." });
+    } catch (e) {
+      res.status(500).json({ error: "Erro ao resetar dados: " + (e instanceof Error ? e.message : e) });
+    }
   });
 
   app.post("/api/v2/setup/complete", async (req, res) => {
@@ -36,9 +49,19 @@ export function registerSetupRoutes(app: Express) {
     };
 
     data.users.push({ ...appUser, pin: "" });
+    data.platformOwners.push({
+      id: `po-${crypto.randomUUID().slice(0, 8)}`,
+      userId: appUser.id,
+      role: "super_admin",
+      displayName: appUser.name,
+      email,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
     await saveData(data);
 
-    const tokens = generateTokens({ id: appUser.id, name: appUser.name, role: appUser.role, tenantId: "" });
+    const tokens = generateTokens({ id: appUser.id, name: appUser.name, role: appUser.role });
 
     res.json({
       token: tokens.token,

@@ -5,6 +5,7 @@ import { matchAgent, findOrCreateSession, updateSession, createAction, updateAct
 import { executeAction } from "./agent-actions";
 import { HAS_GEMINI_KEY, GEMINI_API_KEY } from "../config";
 import { nowIso } from "../helpers";
+import { ensureConversationControl, isAiPaused, pauseAi } from "./agent-control";
 
 interface IncomingMessage {
   text: string;
@@ -48,6 +49,44 @@ function addToConversationHistory(session: AgentSession, role: "user" | "assista
 
 function formatConversationHistory(history: any[]): string {
   return history.map(h => `${h.role === "user" ? "Paciente" : "Assistente"}: ${h.content}`).join("\n");
+}
+
+async function updateConsolidatedContext(session: AgentSession, userText: string, assistantText: string, actionType: AgentActionType): Promise<void> {
+  const previous = String(session.context.consolidatedContext || "");
+  const recentHistory = formatConversationHistory(getConversationHistory(session)).slice(-2500);
+
+  if (HAS_GEMINI_KEY) {
+    const systemPrompt = `Voce atualiza memoria operacional de atendimento para clinicas. Gere um resumo curto e estruturado em portugues, sem inventar dados. Mantenha nome, telefone, interesse/procedimento, profissional/especialidade, status do agendamento, pendencias e proximo passo.`;
+    const prompt = `Resumo anterior:
+${previous || "sem resumo"}
+
+Historico recente:
+${recentHistory}
+
+Ultima mensagem do paciente:
+${userText}
+
+Resposta dada:
+${assistantText}
+
+Acao executada: ${actionType}`;
+    try {
+      const raw = await callLLM(systemPrompt, prompt);
+      if (raw) {
+        session.context.consolidatedContext = raw.slice(0, 3000);
+        session.context.contextUpdatedAt = nowIso();
+        return;
+      }
+    } catch {}
+  }
+
+  session.context.consolidatedContext = [
+    previous,
+    `Ultima acao: ${actionType}`,
+    `Paciente disse: ${userText.slice(0, 500)}`,
+    `Assistente respondeu: ${assistantText.slice(0, 500)}`,
+  ].filter(Boolean).join("\n").slice(-3000);
+  session.context.contextUpdatedAt = nowIso();
 }
 
 async function buildAgendaContext(data: any, session: AgentSession): Promise<string> {
@@ -99,6 +138,10 @@ Ações disponíveis:
 - "coletar_feedback": Paciente quer dar feedback/avaliação
 - "escalar_humano": Paciente pediu atendente humano, reclamação
 - "buscar_paciente": Perguntando sobre dados de paciente
+- "atender_qualificar": Primeiro contato, saudacao, entendimento de necessidade, qualificacao e apresentacao de procedimento
+- "responder_faq": Perguntas institucionais como endereco, horario, convenio, contato, estacionamento
+- "buscar_procedimento": Pergunta sobre tratamentos, procedimentos, estética, beleza, mídia ou detalhes de serviços
+- "especialista_procedimento": Pergunta tecnica sobre procedimento, dor, duracao, recuperacao, riscos, resultado
 - "responder_pergunta": Pergunta geral sobre clínica, serviços, convênios
 - "agendar_consulta": Paciente escolheu um horário específico
 - "criar_tarefa": Solicitação de tarefa para equipe
@@ -107,6 +150,7 @@ Regras importantes:
 - Se o lead já está agendado (leadStage=agendado), use "responder_pergunta" para continuar conversando naturalmente
 - Se o lead já está qualificado (leadStage=qualificado), não precisa qualificar de novo
 - Se o paciente está escolhendo um horário entre opções já oferecidas, use "agendar_consulta"
+- Se a mensagem citar procedimento, tratamento estetico, beleza, imagem/midia ou duvida tecnica de procedimento, use "buscar_procedimento" antes de oferecer agenda
 
 Estágio atual do lead: ${leadStage}
 Nome do agente: ${agent?.name || "Assistente"}
@@ -147,6 +191,16 @@ function extractIntentKeywords(text: string): { action: AgentActionType; params:
   if (/urgente|emergencia|dor|sangrando|grave|imediatamente|preciso.de.ajuda.agora/i.test(lower)) {
     return { action: "classificar_urgencia", params: { message: text } };
   }
+  if (/endere[cç]o|localiza|onde fica|hor[aá]rio de funcionamento|funcionamento|conv[eê]nio|plano de sa[uú]de|telefone|contato|estacionamento|acessibilidade/i.test(lower)) {
+    return { action: "responder_faq", params: { question: text } };
+  }
+  if (/d[oó]i|dor|quanto tempo|dura|dura[cç][aã]o|recupera[cç][aã]o|risco|resultado|efeito|para que serve|como funciona|contraindica/i.test(lower)
+    && /botox|toxina|rugas|clareamento|dental|limpeza de pele|cravos|espinhas|implante|procedimento|tratamento|estetica|estética|beleza|preenchimento|harmonizacao|harmonização/i.test(lower)) {
+    return { action: "especialista_procedimento", params: { question: text } };
+  }
+  if (/botox|toxina|rugas|clareamento|dental|limpeza de pele|cravos|espinhas|implante|procedimento|tratamento|estetica|estética|beleza|preenchimento|harmonizacao|harmonização/i.test(lower)) {
+    return { action: "atender_qualificar", params: { message: text } };
+  }
   if (/feedback|avaliacao|nota|satisfacao|como.foi|avaliar/i.test(lower)) {
     return { action: "coletar_feedback", params: {} };
   }
@@ -181,7 +235,7 @@ async function decideNextAction(session: AgentSession, text: string, agent: Serv
   if (intentMatch) return intentMatch;
 
   if (session.leadStage === "novo" || session.leadStage === "contatado") {
-    return { action: "qualificar_lead", params: { conversation: text, name: session.contactName } };
+    return { action: "atender_qualificar", params: { conversation: text, name: session.contactName } };
   }
   if (session.leadStage === "qualificado") {
     return { action: "sugerir_horarios", params: { conversation: text } };
@@ -229,6 +283,22 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
     msg.from, msg.senderName, msg.from,
     msg.channel, agent.id, agent.name
   );
+  session.context.connectionId = msg.connectionId || session.context.connectionId;
+
+  await ensureConversationControl({
+    contactId: msg.from,
+    contactPhone: msg.from,
+    channel: msg.channel as any,
+    connectionId: msg.connectionId,
+  });
+
+  if (await isAiPaused(msg.from, msg.connectionId)) {
+    session.status = "waiting_human";
+    session.context.aiService = "paused";
+    addToConversationHistory(session, "user", msg.text);
+    await updateSession(session.id, { status: "waiting_human", context: session.context });
+    return { reply: "", session, escalated: true };
+  }
 
   addToConversationHistory(session, "user", msg.text);
   await updateSession(session.id, { context: session.context });
@@ -251,6 +321,8 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
       conversationSummary,
       knowledgeBase: agent.knowledgeBase,
       agentContext,
+      consolidatedContext: session.context.consolidatedContext || "",
+      connectionId: msg.connectionId,
       session,
     };
 
@@ -270,6 +342,7 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
 
     const replyText = result.output?.answer ? String(result.output.answer) : result.message;
     addToConversationHistory(session, "assistant", replyText);
+    await updateConsolidatedContext(session, msg.text, replyText, actionType);
 
     await logExecution(
       session.id, agent.id, actionType,
@@ -280,6 +353,9 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
     if (result.success && result.output) {
       if ((result.output as any).urgency) {
         await updateSession(session.id, { urgency: (result.output as any).urgency as any });
+      }
+      if ((result.output as any).leadStage) {
+        await updateSession(session.id, { leadStage: (result.output as any).leadStage as any });
       }
       if ((result.output as any).qualified === true) {
         const o = result.output as any;
@@ -305,6 +381,14 @@ export async function processIncomingMessage(msg: IncomingMessage, overrideAgent
       }
       if ((result.output as any).escalationTo) {
         await updateSession(session.id, { status: "waiting_human" });
+        await pauseAi({
+          contactId: session.contactId,
+          contactPhone: session.contactPhone,
+          channel: session.channel as any,
+          connectionId: msg.connectionId,
+          reason: String((result.output as any).reason || actionType),
+          pausedBy: agent.name,
+        });
       }
     }
 

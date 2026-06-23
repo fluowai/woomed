@@ -183,8 +183,8 @@ export function registerPhase1Routes(app: Express) {
   });
 
   // === USERS ===
-  app.get("/api/v2/users", requireAuth, requireRoles("admin"), async (_req, res) => {
-    const users = await listUsers();
+  app.get("/api/v2/users", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const users = await listUsers(req.user!);
     res.json(users);
   });
 

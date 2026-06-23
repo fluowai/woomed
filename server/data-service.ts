@@ -21,6 +21,11 @@ function iOrE(user: AppUser, data: AppData, action: string, entity: string, enti
   auditEvent(data, user, action, entity, entityId, details);
 }
 
+function scoped<T>(data: T, tenantId?: string): T {
+  if (!tenantId) return data;
+  return { ...(data as any), tenantId };
+}
+
 // ---------------------------------------------------------------------------
 // Table configurations
 // ---------------------------------------------------------------------------
@@ -247,7 +252,7 @@ export class DataService {
     const created = await pg.create<Patient>(TABLES.patients, data, tenantId);
     if (shouldSkipJsonPersist()) return created;
     const json = await this.json;
-    json.patients.push(data);
+    json.patients.push(scoped(data, tenantId));
     iOrE(user, json, "create", "patient", created.id, created.fullName);
     await saveData(json);
     return created;
@@ -300,7 +305,7 @@ export class DataService {
     const created = await pg.create<Appointment>(TABLES.appointments, data, tenantId);
     if (shouldSkipJsonPersist()) return created;
     const json = await this.json;
-    json.appointments.push(data);
+    json.appointments.push(scoped(data, tenantId));
     iOrE(user, json, "create", "appointment", created.id, `${created.patientName} ${created.date} ${created.timeStart}`);
     await saveData(json);
     return created;
@@ -341,7 +346,7 @@ export class DataService {
     const created = await pg.create<FinanceTransaction>(TABLES.financeTransactions, data, tenantId);
     if (shouldSkipJsonPersist()) return created;
     const json = await this.json;
-    json.financeTransactions.unshift(data);
+    json.financeTransactions.unshift(scoped(data, tenantId));
     iOrE(user, json, "create", "finance_transaction", created.id, created.description);
     await saveData(json);
     return created;
@@ -415,7 +420,7 @@ export class DataService {
     if (shouldSkipJsonPersist()) return created;
     const json = await this.json;
     const collection = (json as any)[entityName as keyof AppData];
-    if (Array.isArray(collection)) collection.unshift(data);
+    if (Array.isArray(collection)) collection.unshift(scoped(data, tenantId));
     iOrE(user, json, "create", entityName, (created as any).id, (created as any).name || (created as any).title || (created as any).description);
     await saveData(json);
     return created;

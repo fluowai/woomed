@@ -5,9 +5,10 @@ import { fetchLoginUsers, login, apiPost, apiGet } from '../api';
 
 interface LoginProps {
   onLogin: (token: string, user: AppUser, state: any) => void;
+  onSignup?: () => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, onSignup }: LoginProps) {
   const [tab, setTab] = useState<'pin' | 'email'>('email');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -162,6 +163,11 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-700 leading-relaxed">
               Configure a GEMINI_API_KEY no arquivo .env.local para ativar o assistente de IA.
             </div>
+          )}
+          {onSignup && (
+            <button type="button" onClick={onSignup} className="mt-6 w-full text-sm font-black text-teal-700 hover:text-teal-800 transition-colors">
+              Criar conta para minha clinica
+            </button>
           )}
         </form>
       </div>

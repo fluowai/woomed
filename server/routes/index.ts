@@ -491,53 +491,70 @@ export function registerRoutes(app: Express) {
   });
 }
 
-function buildState(data: AppData, user: { id: string; name: string; role: string }) {
+function scopedItems<T extends { tenantId?: string }>(items: T[], tenantId?: string, includeGlobal = false): T[] {
+  if (!tenantId) return includeGlobal ? items.filter(item => !item.tenantId) : [];
+  return items.filter(item => item.tenantId === tenantId || (includeGlobal && !item.tenantId));
+}
+
+function scopedMedicalRecords(data: AppData, tenantId?: string) {
+  if (!tenantId) return {};
+  const patientIds = new Set(scopedItems(data.patients as any[], tenantId).map(patient => patient.id));
+  return Object.fromEntries(Object.entries(data.medicalRecords).filter(([patientId]) => patientIds.has(patientId)));
+}
+
+function buildState(data: AppData, user: { id: string; name: string; role: string; tenantId?: string }) {
   const role = user.role;
+  const tenantId = user.tenantId;
+  const isPlatform = role === "super_admin";
   const financeRoles = ["admin", "finance", "super_admin"];
+  const patientScope = isPlatform ? data.patients : scopedItems(data.patients as any[], tenantId);
+  const doctorScope = isPlatform ? data.doctors : scopedItems(data.doctors as any[], tenantId);
+  const appointmentScope = isPlatform ? data.appointments : scopedItems(data.appointments as any[], tenantId);
+  const auditScope = isPlatform ? data.auditEvents : data.auditEvents.filter(event => !tenantId || (event as any).tenantId === tenantId || event.actorId === user.id);
   return {
     user,
-    patients: data.patients,
-    doctors: data.doctors,
-    appointments: data.appointments,
-    medicalRecords: role === "admin" || role === "doctor" || role === "super_admin" ? data.medicalRecords : {},
-    financeTransactions: financeRoles.includes(role) ? data.financeTransactions : [],
-    servicePrices: data.servicePrices,
-    auditEvents: role === "admin" || role === "super_admin" ? data.auditEvents.slice(-200).reverse() : [],
-    serviceAgents: data.serviceAgents,
-    marketingCampaigns: data.marketingCampaigns,
-    tissGuides: financeRoles.includes(role) ? data.tissGuides : [],
-    inventoryItems: data.inventoryItems,
-    referrals: data.referrals,
-    references: data.references,
-    helpTickets: data.helpTickets,
-    llmProviderConfigs: role === "admin" || role === "super_admin" ? data.llmProviderConfigs : [],
+    patients: patientScope,
+    doctors: doctorScope,
+    appointments: appointmentScope,
+    medicalRecords: role === "admin" || role === "doctor" || role === "super_admin" ? (isPlatform ? data.medicalRecords : scopedMedicalRecords(data, tenantId)) : {},
+    financeTransactions: financeRoles.includes(role) ? (isPlatform ? data.financeTransactions : scopedItems(data.financeTransactions as any[], tenantId)) : [],
+    servicePrices: isPlatform ? data.servicePrices : scopedItems(data.servicePrices as any[], tenantId, true),
+    auditEvents: role === "admin" || role === "super_admin" ? auditScope.slice(-200).reverse() : [],
+    serviceAgents: isPlatform ? data.serviceAgents : scopedItems(data.serviceAgents as any[], tenantId),
+    marketingCampaigns: isPlatform ? data.marketingCampaigns : scopedItems(data.marketingCampaigns as any[], tenantId),
+    tissGuides: financeRoles.includes(role) ? (isPlatform ? data.tissGuides : scopedItems(data.tissGuides as any[], tenantId)) : [],
+    inventoryItems: isPlatform ? data.inventoryItems : scopedItems(data.inventoryItems as any[], tenantId),
+    referrals: isPlatform ? data.referrals : scopedItems(data.referrals as any[], tenantId),
+    references: isPlatform ? data.references : scopedItems(data.references as any[], tenantId, true),
+    helpTickets: isPlatform ? data.helpTickets : scopedItems(data.helpTickets as any[], tenantId),
+    llmProviderConfigs: role === "admin" || role === "super_admin" ? (isPlatform ? data.llmProviderConfigs : scopedItems(data.llmProviderConfigs as any[], tenantId, true)) : [],
     agentTemplates: data.agentTemplates,
-    neuralKnowledge: data.neuralKnowledge,
-    patientDocuments: data.patientDocuments,
-    waitingList: data.waitingList,
-    scheduleBlocks: data.scheduleBlocks,
-    medicalTemplates: data.medicalTemplates,
-    accountsPayable: financeRoles.includes(role) ? data.accountsPayable : [],
-    paymentGatewayConfig: role === "admin" || role === "super_admin" ? data.paymentGatewayConfig : [],
+    neuralKnowledge: isPlatform ? data.neuralKnowledge : scopedItems(data.neuralKnowledge as any[], tenantId, true),
+    patientDocuments: isPlatform ? data.patientDocuments : scopedItems(data.patientDocuments as any[], tenantId),
+    waitingList: isPlatform ? data.waitingList : scopedItems(data.waitingList as any[], tenantId),
+    scheduleBlocks: isPlatform ? data.scheduleBlocks : scopedItems(data.scheduleBlocks as any[], tenantId),
+    medicalTemplates: isPlatform ? data.medicalTemplates : scopedItems(data.medicalTemplates as any[], tenantId),
+    accountsPayable: financeRoles.includes(role) ? (isPlatform ? data.accountsPayable : scopedItems(data.accountsPayable as any[], tenantId)) : [],
+    paymentGatewayConfig: role === "admin" || role === "super_admin" ? (isPlatform ? data.paymentGatewayConfig : scopedItems(data.paymentGatewayConfig as any[], tenantId)) : [],
     tenants: role === "super_admin" ? data.tenants : [],
     plans: role === "super_admin" ? data.plans : [],
-    crmLeads: (data as any).crmLeads || [],
-    crmPipelines: (data as any).crmPipelines || [],
-    crmOpportunities: (data as any).crmOpportunities || [],
-    crmTasks: (data as any).crmTasks || [],
-    crmInteractions: (data as any).crmInteractions || [],
-    leadSources: (data as any).leadSources || [],
-    npsSurveys: (data as any).npsSurveys || [],
-    npsResponses: (data as any).npsResponses || [],
-    automationTemplates: (data as any).automationTemplates || [],
-    automationReminders: (data as any).automationReminders || [],
-    lgpdConsentTemplates: (data as any).lgpdConsentTemplates || [],
-    lgpdPatientConsents: (data as any).lgpdPatientConsents || [],
-    lgpdDataSubjectRequests: (data as any).lgpdDataSubjectRequests || [],
-    lgpdSensitiveAccessLogs: (data as any).lgpdSensitiveAccessLogs || [],
-    professionalUnits: (data as any).professionalUnits || [],
-    professionalRooms: (data as any).professionalRooms || [],
-    patientPortalLogins: (data as any).patientPortalLogins || [],
-    patientSatisfactionRatings: (data as any).patientSatisfactionRatings || []
+    crmLeads: isPlatform ? ((data as any).crmLeads || []) : scopedItems((data as any).crmLeads || [], tenantId),
+    crmPipelines: isPlatform ? ((data as any).crmPipelines || []) : scopedItems((data as any).crmPipelines || [], tenantId, true),
+    crmOpportunities: isPlatform ? ((data as any).crmOpportunities || []) : scopedItems((data as any).crmOpportunities || [], tenantId),
+    crmTasks: isPlatform ? ((data as any).crmTasks || []) : scopedItems((data as any).crmTasks || [], tenantId),
+    crmInteractions: isPlatform ? ((data as any).crmInteractions || []) : scopedItems((data as any).crmInteractions || [], tenantId),
+    leadSources: isPlatform ? ((data as any).leadSources || []) : scopedItems((data as any).leadSources || [], tenantId, true),
+    npsSurveys: isPlatform ? ((data as any).npsSurveys || []) : scopedItems((data as any).npsSurveys || [], tenantId),
+    npsResponses: isPlatform ? ((data as any).npsResponses || []) : scopedItems((data as any).npsResponses || [], tenantId),
+    automationTemplates: isPlatform ? ((data as any).automationTemplates || []) : scopedItems((data as any).automationTemplates || [], tenantId),
+    automationReminders: isPlatform ? ((data as any).automationReminders || []) : scopedItems((data as any).automationReminders || [], tenantId),
+    lgpdConsentTemplates: isPlatform ? ((data as any).lgpdConsentTemplates || []) : scopedItems((data as any).lgpdConsentTemplates || [], tenantId, true),
+    lgpdPatientConsents: isPlatform ? ((data as any).lgpdPatientConsents || []) : scopedItems((data as any).lgpdPatientConsents || [], tenantId),
+    lgpdDataSubjectRequests: isPlatform ? ((data as any).lgpdDataSubjectRequests || []) : scopedItems((data as any).lgpdDataSubjectRequests || [], tenantId),
+    lgpdSensitiveAccessLogs: isPlatform ? ((data as any).lgpdSensitiveAccessLogs || []) : scopedItems((data as any).lgpdSensitiveAccessLogs || [], tenantId),
+    professionalUnits: isPlatform ? ((data as any).professionalUnits || []) : scopedItems((data as any).professionalUnits || [], tenantId),
+    professionalRooms: isPlatform ? ((data as any).professionalRooms || []) : scopedItems((data as any).professionalRooms || [], tenantId),
+    patientPortalLogins: isPlatform ? ((data as any).patientPortalLogins || []) : scopedItems((data as any).patientPortalLogins || [], tenantId),
+    patientSatisfactionRatings: isPlatform ? ((data as any).patientSatisfactionRatings || []) : scopedItems((data as any).patientSatisfactionRatings || [], tenantId)
   };
 }

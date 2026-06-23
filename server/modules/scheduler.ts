@@ -17,6 +17,40 @@ interface SchedulerTask {
   completedAt?: string;
 }
 
+function getSentRegistry(data: any): Record<string, string> {
+  const sched = getSchedulerData(data);
+  if (!(sched as any).sent) (sched as any).sent = {};
+  return (sched as any).sent;
+}
+
+function reminderKey(type: "24h" | "same_day" | "feedback", appointmentId: string): string {
+  return `${type}:${appointmentId}`;
+}
+
+async function buildAppointmentMessage(type: "24h" | "same_day" | "feedback", apt: Appointment, doctorName?: string): Promise<string> {
+  if (HAS_GEMINI_KEY) {
+    const systemPrompt = `Voce escreve mensagens curtas de WhatsApp para clinicas. Seja natural, acolhedor e objetivo. Nao use diagnostico, nao invente informacoes e mantenha ate 450 caracteres.`;
+    const prompt = `Tipo: ${type}
+Paciente: ${apt.patientName}
+Profissional: ${doctorName || "nao informado"}
+Data: ${apt.date}
+Horario: ${apt.timeStart}
+Tipo de consulta: ${apt.type}`;
+    try {
+      const raw = await callLLM(systemPrompt, prompt);
+      if (raw) return raw.slice(0, 700);
+    } catch {}
+  }
+
+  if (type === "same_day") {
+    return `Ola ${apt.patientName}! Lembrando da sua consulta hoje (${apt.date}) as ${apt.timeStart}${doctorName ? ` com ${doctorName}` : ""}. Se precisar de ajuda, responda por aqui.`;
+  }
+  if (type === "feedback") {
+    return `Ola ${apt.patientName}! Como foi sua experiencia no atendimento? De 0 a 10, qual nota voce daria?`;
+  }
+  return `Ola ${apt.patientName}! Lembramos da sua consulta amanha (${apt.date}) as ${apt.timeStart}${doctorName ? ` com ${doctorName}` : ""}. Responda "confirmar" ou "remarcar" se precisar alterar.`;
+}
+
 async function callLLM(systemPrompt: string, userMessage: string): Promise<string> {
   if (!HAS_GEMINI_KEY) return "";
   const { GoogleGenAI } = await import("@google/genai");
@@ -84,6 +118,7 @@ async function processReminders(): Promise<void> {
 
 async function processScheduledConfirmations(): Promise<void> {
   const data = await loadData();
+  const sent = getSentRegistry(data);
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -94,6 +129,8 @@ async function processScheduledConfirmations(): Promise<void> {
   );
 
   for (const apt of pendingConfirmations) {
+    const key = reminderKey("24h", apt.id);
+    if (sent[key]) continue;
     const patient = data.patients.find(
       p => p.fullName.toUpperCase() === apt.patientName.toUpperCase()
     );
@@ -103,11 +140,12 @@ async function processScheduledConfirmations(): Promise<void> {
     if (!conn || conn.status !== "connected") continue;
 
     const doctor = data.doctors.find(d => d.id === apt.doctorId);
-    const message = `Olá ${apt.patientName}! 😊 Lembramos da sua consulta${doctor ? ` com ${doctor.name}` : ""} amanhã (${apt.date}) às ${apt.timeStart}. Por favor, confirme sua presença respondendo "confirmar" ou "remarcar" se precisar alterar.`;
+    const message = await buildAppointmentMessage("24h", apt, doctor?.name);
 
     const phoneJid = patient.phone;
     if (phoneJid) {
       await sendWhatsAppMessage(conn.id, phoneJid, message);
+      sent[key] = nowIso();
 
       const rt = (data as any).__agentRuntime || {};
       if (!rt.executionLogs) rt.executionLogs = [];
@@ -131,8 +169,39 @@ async function processScheduledConfirmations(): Promise<void> {
   await saveData(data);
 }
 
+async function processSameDayReminders(): Promise<void> {
+  const data = await loadData();
+  const sent = getSentRegistry(data);
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const appointments = data.appointments.filter(
+    a => a.date === todayStr && (a.status === "agendado" || a.status === "confirmado")
+  );
+
+  for (const apt of appointments) {
+    const key = reminderKey("same_day", apt.id);
+    if (sent[key]) continue;
+
+    const patient = data.patients.find(
+      p => p.fullName.toUpperCase() === apt.patientName.toUpperCase()
+    );
+    if (!patient?.phone) continue;
+
+    const conn = data.whatsappConnections?.[0];
+    if (!conn || conn.status !== "connected") continue;
+
+    const doctor = data.doctors.find(d => d.id === apt.doctorId);
+    const message = await buildAppointmentMessage("same_day", apt, doctor?.name);
+    await sendWhatsAppMessage(conn.id, patient.phone, message);
+    sent[key] = nowIso();
+  }
+
+  await saveData(data);
+}
+
 async function processPostAppointmentFeedback(): Promise<void> {
   const data = await loadData();
+  const sent = getSentRegistry(data);
   const now = new Date();
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -143,6 +212,8 @@ async function processPostAppointmentFeedback(): Promise<void> {
   );
 
   for (const apt of completedAppointments) {
+    const key = reminderKey("feedback", apt.id);
+    if (sent[key]) continue;
     const patient = data.patients.find(
       p => p.fullName.toUpperCase() === apt.patientName.toUpperCase()
     );
@@ -156,11 +227,13 @@ async function processPostAppointmentFeedback(): Promise<void> {
     const conn = data.whatsappConnections?.[0];
     if (!conn || conn.status !== "connected") continue;
 
-    const message = `Olá ${apt.patientName}! 😊 Seu atendimento foi ontem. Gostaríamos de saber como foi sua experiência! De 0 a 10, qual nota você dá para o atendimento? (0 = muito ruim, 10 = excelente)`;
+    const doctor = data.doctors.find(d => d.id === apt.doctorId);
+    const message = await buildAppointmentMessage("feedback", apt, doctor?.name);
 
     const phoneJid = patient.phone;
     if (phoneJid) {
       await sendWhatsAppMessage(conn.id, phoneJid, message);
+      sent[key] = nowIso();
     }
   }
 
@@ -171,6 +244,7 @@ async function tick(): Promise<void> {
   try {
     await processReminders();
     await processScheduledConfirmations();
+    await processSameDayReminders();
     await processPostAppointmentFeedback();
     await findAbandonedSessions();
     await checkFollowUps();

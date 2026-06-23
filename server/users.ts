@@ -35,6 +35,7 @@ export async function createUser(input: UserCreateInput, actor: AppUser): Promis
     name: input.name,
     email: input.email,
     role: input.role as AppUser["role"],
+    tenantId: actor.role === "super_admin" ? undefined : actor.tenantId,
     specialty: input.specialty,
     pin: input.password,
     passwordHash: hashPassword(input.password)
@@ -50,6 +51,7 @@ export async function updateUser(id: string, input: UserUpdateInput, actor: AppU
   const idx = data.users.findIndex(u => u.id === id);
   if (idx === -1) return null;
   const user = data.users[idx];
+  if (actor.role !== "super_admin" && user.tenantId !== actor.tenantId) return null;
   if (input.name !== undefined) user.name = input.name;
   if (input.email !== undefined) user.email = input.email;
   if (input.role !== undefined) user.role = input.role as any;
@@ -65,15 +67,19 @@ export async function deleteUser(id: string, actor: AppUser): Promise<boolean> {
   const data = await loadData();
   const idx = data.users.findIndex(u => u.id === id);
   if (idx === -1) return false;
+  if (actor.role !== "super_admin" && data.users[idx].tenantId !== actor.tenantId) return false;
   const removed = data.users.splice(idx, 1)[0];
   audit(data, actor, "delete", "user", id, removed.name);
   await saveData(data);
   return true;
 }
 
-export async function listUsers(): Promise<AppUser[]> {
+export async function listUsers(actor?: AppUser): Promise<AppUser[]> {
   const data = await loadData();
-  return data.users.map(u => ({ id: u.id, name: u.name, role: u.role, specialty: u.specialty }));
+  const users = actor && actor.role !== "super_admin"
+    ? data.users.filter(u => u.tenantId === actor.tenantId)
+    : data.users;
+  return users.map(u => ({ id: u.id, name: u.name, role: u.role, specialty: u.specialty, tenantId: u.tenantId }));
 }
 
 export async function generateInvite(email: string, role: string, actor: AppUser): Promise<string> {

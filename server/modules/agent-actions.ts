@@ -4,6 +4,7 @@ import type { AgentActionType, AgentSession, AgentLead, UrgencyLevel, LeadStage 
 import type { Patient, Doctor, Appointment, ServiceAgent } from "../../src/types";
 import { isSlotAvailable, addDays, addMinutes, dayName, timeToMinutes, minutesToTime, nowIso, normalize } from "../helpers";
 import { callWhatsmeowBridge } from "../whatsapp-utils";
+import { pauseAi } from "./agent-control";
 
 interface ActionResult {
   success: boolean;
@@ -12,6 +13,74 @@ interface ActionResult {
 }
 
 type ActionHandler = (session: AgentSession, input: Record<string, unknown>) => Promise<ActionResult>;
+
+function buildProcedureIndex(data: any) {
+  return ((data.procedureCatalog || []) as any[]).filter(item => item.isActive !== false);
+}
+
+function findProcedure(data: any, rawQuery: string) {
+  const normalizedQuery = normalize(rawQuery || "");
+  if (!normalizedQuery) return null;
+  return buildProcedureIndex(data).find(item => {
+    const haystack = [
+      item.name,
+      item.category,
+      item.specialty,
+      item.description,
+      ...(item.aliases || []),
+    ].map(normalize).join(" ");
+    return haystack.includes(normalizedQuery) ||
+      normalizedQuery.includes(normalize(item.name)) ||
+      (item.aliases || []).some((alias: string) => normalizedQuery.includes(normalize(alias)));
+  }) || null;
+}
+
+function findDoctorForProcedure(data: any, procedure: any): Doctor | undefined {
+  if (!procedure) return undefined;
+  return procedure.doctorId
+    ? data.doctors.find((d: Doctor) => d.id === procedure.doctorId)
+    : data.doctors.find((d: Doctor) => normalize(d.specialty).includes(normalize(procedure.specialty)));
+}
+
+function extractEmail(text: string): string {
+  return text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+}
+
+function looksLikeGreeting(text: string): boolean {
+  return /^(oi|ola|olá|bom dia|boa tarde|boa noite|tudo bem|hey|oie)\b/i.test(text.trim());
+}
+
+function isPriceQuestion(text: string): boolean {
+  return /pre[cç]o|valor|quanto custa|or[cç]amento|custa quanto|quanto fica/i.test(text);
+}
+
+function isDetailedProcedureQuestion(text: string): boolean {
+  return /d[oó]i|dor|tempo|dura|dura[cç][aã]o|recupera[cç][aã]o|risco|serve|resultado|efeito|contraindica|p[oó]s|antes|depois/i.test(text);
+}
+
+function inferDoctorFromContext(data: any, session: AgentSession, text = ""): Doctor | undefined {
+  const directId = String(session.context.doctorId || "");
+  if (directId) {
+    const found = data.doctors.find((d: Doctor) => d.id === directId);
+    if (found) return found;
+  }
+  const context = [
+    text,
+    String(session.context.procedureInterest || ""),
+    String(session.context.specialty || ""),
+    String(session.context.consolidatedContext || ""),
+  ].join(" ");
+  const procedure = findProcedure(data, context);
+  if (procedure) {
+    const doctor = findDoctorForProcedure(data, procedure);
+    if (doctor) return doctor;
+  }
+  const normalizedContext = normalize(context);
+  return data.doctors.find((doctor: Doctor) =>
+    normalizedContext.includes(normalize(doctor.name)) ||
+    normalizedContext.includes(normalize(doctor.specialty))
+  );
+}
 
 async function callLLM(systemPrompt: string, userMessage: string): Promise<string> {
   if (!HAS_GEMINI_KEY) return "";
@@ -112,7 +181,8 @@ const criarLead: ActionHandler = async (session, input) => {
 
 const sugerirHorarios: ActionHandler = async (session, input) => {
   const data = await loadData();
-  const doctorId = String(input.doctorId || session.context.doctorId || "");
+  const inferredDoctor = inferDoctorFromContext(data, session, String(input.conversation || input.message || ""));
+  const doctorId = String(input.doctorId || session.context.doctorId || inferredDoctor?.id || "");
   const dateStr = String(input.date || "");
   const timeStr = String(input.time || "08:00");
 
@@ -150,6 +220,7 @@ const sugerirHorarios: ActionHandler = async (session, input) => {
   if (suggestions.length > 0) {
     session.context.lastSuggestions = suggestions;
     session.context.lastDoctorId = doctor.id;
+    session.context.doctorId = doctor.id;
   }
 
   return {
@@ -178,13 +249,15 @@ async function extractDateTimeFromConversation(conversation: string, suggestions
 
 const agendarConsulta: ActionHandler = async (session, input) => {
   const data = await loadData();
-  const doctorId = String(input.doctorId || session.context.doctorId || "");
+  const conversation = String(input.conversation || "");
+  const inferredDoctor = inferDoctorFromContext(data, session, conversation);
+  const doctorId = String(input.doctorId || session.context.doctorId || inferredDoctor?.id || "");
   let date = String(input.date || "");
   let timeStart = String(input.timeStart || input.time || "");
   const patientName = String(input.patientName || session.contactName || "");
   const patientPhone = String(input.phone || session.contactPhone || "");
+  const patientEmail = String(input.email || session.context.email || extractEmail(conversation) || "");
   const type = String(input.type || "consulta");
-  const conversation = String(input.conversation || "");
 
   const doctor = data.doctors.find(d => d.id === doctorId);
   if (!doctor) return { success: false, output: {}, message: "Profissional nao encontrado" };
@@ -199,6 +272,13 @@ const agendarConsulta: ActionHandler = async (session, input) => {
   }
 
   if (!date || !timeStart) return { success: false, output: {}, message: "Informe qual horario voce prefere entre as opcoes que mostrei" };
+  if (!patientName || patientName === "Contato" || patientName === patientPhone || !patientEmail) {
+    return {
+      success: false,
+      output: { needs: ["patientName", "email"], doctor: { id: doctor.id, name: doctor.name }, date, timeStart },
+      message: "Perfeito, esse horario pode funcionar. Para confirmar a consulta, preciso do seu nome completo e melhor email."
+    };
+  }
 
   const timeEnd = addMinutes(timeStart, 30);
   const existingAppointments = data.appointments.filter(a => a.doctorId === doctorId && a.status !== "desmarcado");
@@ -213,10 +293,12 @@ const agendarConsulta: ActionHandler = async (session, input) => {
       phone: patientPhone,
       birthDate: "",
       cpf: "",
-      email: "",
+      email: patientEmail,
       address: { street: "", city: "", state: "", zip: "" },
     };
     data.patients.push(patient);
+  } else if (patientEmail && !patient.email) {
+    patient.email = patientEmail;
   }
 
   const appointment: Appointment = {
@@ -479,12 +561,15 @@ const escalarHumano: ActionHandler = async (session, input) => {
   const data = await loadData();
   const reason = String(input.reason || input.motivo || "");
   const summary = String(input.summary || "");
+  const connectionId = String(input.connectionId || session.context.connectionId || "");
 
   const agents = data.serviceAgents;
   const targetAgent = agents.find(a => a.id === session.agentId);
   const escalationTarget = targetAgent?.escalationTo || "admin";
 
   session.status = "waiting_human";
+  session.context.aiService = "paused";
+  session.context.handoffReason = reason || "solicitacao do paciente";
 
   const rt = (data as any).__agentRuntime;
   if (rt?.leads) {
@@ -493,6 +578,14 @@ const escalarHumano: ActionHandler = async (session, input) => {
   }
 
   await saveData(data);
+  await pauseAi({
+    contactId: session.contactId,
+    contactPhone: session.contactPhone,
+    channel: session.channel as any,
+    connectionId: connectionId || undefined,
+    reason: reason || "handoff_humano",
+    pausedBy: session.agentName || "agent",
+  });
 
   return {
     success: true,
@@ -635,6 +728,233 @@ const avaliarDisponibilidade: ActionHandler = async (_session, input) => {
   };
 };
 
+const buscarProcedimento: ActionHandler = async (session, input) => {
+  const data = await loadData();
+  const query = String(input.procedure || input.procedimento || input.query || input.message || input.conversation || "").trim();
+  if (!query) {
+    return { success: false, output: { procedures: data.procedureCatalog || [] }, message: "Informe qual procedimento deseja conhecer." };
+  }
+
+  const items = buildProcedureIndex(data);
+  const match = findProcedure(data, query);
+
+  if (!match) {
+    return {
+      success: true,
+      output: { found: false, query, procedures: items.map(item => ({ id: item.id, name: item.name, specialty: item.specialty })) },
+      message: "Ainda nao encontrei esse procedimento no catalogo. Vou encaminhar para a equipe confirmar os detalhes."
+    };
+  }
+
+  const doctor = findDoctorForProcedure(data, match);
+  session.context.procedureInterest = match.name;
+  if (doctor) session.context.doctorId = doctor.id;
+
+  const evaluationText = match.requiresEvaluation
+    ? "A avaliacao e o melhor proximo passo para confirmar indicacao, plano e valores com seguranca."
+    : "Posso te ajudar a verificar horarios para esse atendimento.";
+  const priceText = typeof match.price === "number" && match.price > 0 ? ` Valor de referencia: R$ ${match.price.toFixed(2)}.` : "";
+  const doctorText = doctor ? ` O profissional indicado e ${doctor.name} (${doctor.specialty}).` : "";
+  const mediaText = match.mediaUrl ? `\n\nMidia de referencia: ${match.mediaUrl}` : "";
+  const message = `${match.name}: ${match.description}${doctorText}${priceText}\n\n${match.mediaCaption || evaluationText}${mediaText}\n\n${evaluationText}`;
+
+  return {
+    success: true,
+    output: {
+      found: true,
+      procedure: {
+        id: match.id,
+        name: match.name,
+        specialty: match.specialty,
+        category: match.category,
+        doctorId: doctor?.id || match.doctorId,
+        doctorName: doctor?.name || match.doctorName,
+        mediaUrl: match.mediaUrl,
+        mediaType: match.mediaType,
+        mediaCaption: match.mediaCaption,
+        requiresEvaluation: match.requiresEvaluation,
+      },
+      suggestedNextAction: "sugerir_horarios",
+    },
+    message,
+  };
+};
+
+const responderFaq: ActionHandler = async (session, input) => {
+  const question = String(input.question || input.message || input.conversation || "").trim();
+  const data = await loadData();
+  const agent = data.serviceAgents.find(a => a.id === session.agentId);
+  const kb = [
+    ...(agent?.knowledgeBase || []),
+    "Horario de funcionamento: segunda a sexta, das 08:00 as 18:00.",
+    "Agendamento, remarcacao e cancelamento podem ser feitos por este canal.",
+    "Valores de procedimentos dependem de avaliacao profissional e plano individual.",
+    "Em caso de urgencia, procure atendimento de emergencia ou fale com a equipe humana.",
+  ];
+
+  const lower = question.toLowerCase();
+  const directAnswers: Array<[RegExp, string]> = [
+    [/hor[aá]rio|funcionamento|abre|fecha/, "Nosso atendimento funciona em horario comercial. Para horarios especificos da unidade, posso transferir para a equipe confirmar."],
+    [/endere[cç]o|localiza|onde fica|chegar/, "Ainda nao tenho o endereco completo configurado nesta base. Vou pedir para a equipe confirmar a localizacao certinha."],
+    [/conv[eê]nio|plano|seguro/, "A cobertura depende do convenio e do procedimento. O ideal e confirmar com a equipe antes da consulta."],
+    [/telefone|contato|email|e-mail/, "Voce pode continuar por aqui no WhatsApp. Se precisar de outro canal, posso encaminhar para a recepcao."],
+    [/estacionamento|acessibilidade/, "Preciso confirmar essa informacao com a equipe da unidade para te responder com seguranca."],
+  ];
+
+  const found = directAnswers.find(([pattern]) => pattern.test(lower));
+  if (found) {
+    const needsHuman = /endere[cç]o|localiza|estacionamento|acessibilidade/.test(lower);
+    return {
+      success: true,
+      output: needsHuman ? { escalationTo: agent?.escalationTo || "Recepcao", reason: "faq_sem_info" } : { answer: found[1], usedKb: true },
+      message: found[1],
+    };
+  }
+
+  if (HAS_GEMINI_KEY) {
+    const systemPrompt = `Voce e um subagente FAQ de clinica. Responda apenas com base na base abaixo. Se nao houver informacao suficiente, diga que vai transferir para a equipe. Nao invente dados.\n\nBase:\n${kb.join("\n")}`;
+    const raw = await callLLM(systemPrompt, question);
+    if (raw && !/nao sei|não sei/i.test(raw)) {
+      return { success: true, output: { answer: raw, usedKb: true }, message: raw };
+    }
+  }
+
+  return {
+    success: true,
+    output: { escalationTo: agent?.escalationTo || "Recepcao", reason: "faq_sem_info" },
+    message: "Essa e uma otima pergunta e eu prefiro confirmar com a equipe para te passar a informacao correta.",
+  };
+};
+
+const atenderQualificar: ActionHandler = async (session, input) => {
+  const text = String(input.message || input.conversation || input.query || "").trim();
+  const data = await loadData();
+  const procedure = findProcedure(data, `${text}\n${session.context.consolidatedContext || ""}`);
+  const email = extractEmail(text);
+  if (email) session.context.email = email;
+
+  if (looksLikeGreeting(text) && session.messageCount <= 2 && !session.contactName) {
+    return {
+      success: true,
+      output: { leadStage: "contatado" },
+      message: "Ola! Sou a assistente da clinica. Como posso te chamar?",
+    };
+  }
+
+  if (isPriceQuestion(text)) {
+    return {
+      success: true,
+      output: { leadStage: "qualificado" },
+      message: "O valor depende do que o profissional identificar na avaliacao. A consulta serve justamente para te dar clareza e um plano seguro, sem eu te passar um valor impreciso por aqui.",
+    };
+  }
+
+  if (!procedure) {
+    const fallback = HAS_GEMINI_KEY
+      ? await callLLM(
+          `Voce e Sofia, assistente de clinica. Acolha em portugues, nao diga que e IA, nao diagnostique, faca uma pergunta simples para entender a necessidade e conduza para avaliacao quando fizer sentido. Contexto: ${session.context.consolidatedContext || "sem contexto"}`,
+          text
+        ).catch(() => "")
+      : "";
+    return {
+      success: true,
+      output: { leadStage: "contatado" },
+      message: fallback || "Entendi. Me conta um pouco melhor o que voce gostaria de resolver ou qual procedimento tem interesse?",
+    };
+  }
+
+  const doctor = findDoctorForProcedure(data, procedure);
+  session.context.procedureInterest = procedure.name;
+  session.context.specialty = procedure.specialty;
+  if (doctor) session.context.doctorId = doctor.id;
+
+  const doctorText = doctor
+    ? `O profissional indicado para esse caso e ${doctor.name}, da area de ${doctor.specialty}.`
+    : `Esse procedimento fica ligado a area de ${procedure.specialty}.`;
+  const mediaText = procedure.mediaUrl
+    ? `\n\nTenho uma midia de referencia para te mostrar: ${procedure.mediaUrl}${procedure.mediaCaption ? `\n${procedure.mediaCaption}` : ""}`
+    : procedure.mediaCaption ? `\n\n${procedure.mediaCaption}` : "";
+
+  return {
+    success: true,
+    output: {
+      qualified: true,
+      suggestedNeed: procedure.name,
+      urgency: "baixa",
+      procedure: {
+        id: procedure.id,
+        name: procedure.name,
+        specialty: procedure.specialty,
+        doctorId: doctor?.id || procedure.doctorId,
+        doctorName: doctor?.name || procedure.doctorName,
+        mediaUrl: procedure.mediaUrl,
+        mediaType: procedure.mediaType,
+        mediaCaption: procedure.mediaCaption,
+      },
+      leadStage: "qualificado",
+    },
+    message: `${procedure.name}: ${procedure.description}\n\n${doctorText}${mediaText}\n\nO primeiro passo e uma avaliacao para confirmar indicacao e montar um plano seguro. Quer que eu veja horarios disponiveis?`,
+  };
+};
+
+const especialistaProcedimento: ActionHandler = async (session, input) => {
+  const text = String(input.message || input.conversation || input.query || "").trim();
+  const data = await loadData();
+  const agent = data.serviceAgents.find(a => a.id === session.agentId);
+  const procedure = findProcedure(data, `${text}\n${session.context.procedureInterest || ""}\n${session.context.consolidatedContext || ""}`);
+
+  if (!procedure) {
+    return {
+      success: true,
+      output: { escalationTo: agent?.escalationTo || "Equipe clinica", reason: "procedimento_nao_identificado" },
+      message: "Essa pergunta e importante e eu prefiro encaminhar para a equipe te orientar com precisao.",
+    };
+  }
+
+  const lower = text.toLowerCase();
+  const controlledAnswers: Record<string, Array<[RegExp, string]>> = {
+    "Clareamento Dental": [
+      [/d[oó]i|dor|sensibilidade/, "O clareamento geralmente e bem tolerado. Algumas pessoas podem sentir sensibilidade temporaria, por isso a avaliacao profissional e importante."],
+      [/tempo|dura|sess[aã]o/, "A duracao varia conforme a tecnica indicada. A avaliacao define o melhor protocolo para o seu caso."],
+      [/resultado|branco|clareia/, "O objetivo e deixar o sorriso mais claro de forma natural e segura. O resultado varia de pessoa para pessoa."],
+    ],
+    "Toxina Botulinica": [
+      [/como funciona|serve|para que/, "A toxina botulinica relaxa pontos especificos da musculatura para suavizar rugas de expressao e prevenir marcacoes mais profundas."],
+      [/d[oó]i|dor|agulha/, "A aplicacao costuma ser rapida, com desconforto leve. A avaliacao ajuda a explicar pontos, cuidados e expectativa de resultado."],
+      [/tempo|resultado|efeito|dura/, "O resultado nao e imediato e costuma aparecer progressivamente. A duracao varia por pessoa, por isso o profissional orienta no atendimento."],
+    ],
+    "Limpeza de Pele": [
+      [/serve|para que|beneficio/, "A limpeza de pele ajuda a remover impurezas, cravos e celulas mortas, melhorando textura e aspecto da pele."],
+      [/recupera|vermelh|p[oó]s|depois/, "Pode haver vermelhidao temporaria. Os cuidados pos-procedimento devem ser orientados pelo profissional."],
+      [/d[oó]i|dor/, "Pode haver algum desconforto em pontos especificos, mas o procedimento e conduzido para ser o mais confortavel possivel."],
+    ],
+  };
+
+  const answers = controlledAnswers[procedure.name] || [];
+  const found = answers.find(([pattern]) => pattern.test(lower));
+  if (found) {
+    return {
+      success: true,
+      output: { answer: found[1], procedure: { id: procedure.id, name: procedure.name } },
+      message: `${found[1]}\n\nPara te orientar com seguranca, o ideal e confirmar isso em uma avaliacao.`,
+    };
+  }
+
+  if (HAS_GEMINI_KEY) {
+    const systemPrompt = `Voce e um especialista de procedimentos de clinica. Responda somente com base nos dados do procedimento abaixo e regras de seguranca. Nao invente duracao, preco, riscos especificos ou diagnostico. Se faltar informacao, encaminhe para humano.\nProcedimento: ${procedure.name}\nDescricao: ${procedure.description}\nLegenda: ${procedure.mediaCaption || ""}`;
+    const raw = await callLLM(systemPrompt, text);
+    if (raw && !/nao tenho|não tenho|encaminhar/i.test(raw)) {
+      return { success: true, output: { answer: raw, procedure: { id: procedure.id, name: procedure.name } }, message: raw };
+    }
+  }
+
+  return {
+    success: true,
+    output: { escalationTo: agent?.escalationTo || "Equipe clinica", reason: "pergunta_tecnica_sem_base" },
+    message: "Essa e uma pergunta bem especifica. Para te passar uma resposta segura, vou encaminhar para nossa equipe.",
+  };
+};
+
 const responderPergunta: ActionHandler = async (session, input) => {
   const question = String(input.question || input.pergunta || input.message || input.conversation || "");
 
@@ -657,6 +977,7 @@ const responderPergunta: ActionHandler = async (session, input) => {
     : "Nenhum historico ainda.";
 
   const agentCtx = String(input.agentContext || "");
+  const consolidatedContext = String(input.consolidatedContext || session.context.consolidatedContext || "");
 
   let appointmentStr = "";
   if (session.appointmentId) {
@@ -670,6 +991,9 @@ const responderPergunta: ActionHandler = async (session, input) => {
   const systemPrompt = `Você é um assistente virtual de uma clinica medica chamado ${agent?.name || "Assistente"}.
 
 ${agentCtx}
+
+Memoria consolidada do paciente:
+${consolidatedContext || "Sem memoria consolidada ainda."}
 
 Regras importantes:
 1. NÃO repita informações que já foram ditas na conversa
@@ -856,6 +1180,10 @@ const actionHandlers: Record<AgentActionType, ActionHandler> = {
   buscar_paciente: buscarPaciente,
   criar_tarefa: criarTarefa,
   avaliar_disponibilidade: avaliarDisponibilidade,
+  atender_qualificar: atenderQualificar,
+  responder_faq: responderFaq,
+  buscar_procedimento: buscarProcedimento,
+  especialista_procedimento: especialistaProcedimento,
   responder_pergunta: responderPergunta,
   consultar_prontuario: consultarProntuario,
   consultar_financeiro: consultarFinanceiro,
@@ -897,6 +1225,10 @@ export function getActionLabel(type: AgentActionType): string {
     buscar_paciente: "Buscar Paciente",
     criar_tarefa: "Criar Tarefa",
     avaliar_disponibilidade: "Avaliar Disponibilidade",
+    atender_qualificar: "Atender e Qualificar",
+    responder_faq: "Responder FAQ",
+    buscar_procedimento: "Buscar Procedimento",
+    especialista_procedimento: "Especialista em Procedimento",
     responder_pergunta: "Responder Pergunta",
     consultar_prontuario: "Consultar Prontuario",
     consultar_financeiro: "Consultar Financeiro",

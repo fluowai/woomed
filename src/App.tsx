@@ -13,6 +13,7 @@ import Dashboard from './components/Dashboard';
 import Financeiro from './components/Financeiro';
 import Login from './components/Login';
 import SetupWizard from './components/SetupWizard';
+import ClinicOnboarding from './components/ClinicOnboarding';
 import SaaSAdmin from './components/SaaSAdmin';
 import { WhatsAppConnections, WhatsAppInbox } from './components/WhatsApp';
 import {
@@ -85,6 +86,7 @@ export default function App() {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [showClinicOnboarding, setShowClinicOnboarding] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -228,6 +230,7 @@ export default function App() {
     localStorage.setItem('consultio_token', token);
     setAuthToken(token);
     setCurrentUser(user);
+    setShowClinicOnboarding(false);
     applyBootstrapState(state);
   };
 
@@ -906,6 +909,9 @@ export default function App() {
     if (needsSetup) {
       return <SetupWizard onComplete={handleSetupComplete} />;
     }
+    if (showClinicOnboarding) {
+      return <ClinicOnboarding onBack={() => setShowClinicOnboarding(false)} onComplete={handleLogin} />;
+    }
     return (
       <>
         {bootstrapError && (
@@ -913,7 +919,7 @@ export default function App() {
             {bootstrapError}
           </div>
         )}
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleLogin} onSignup={() => setShowClinicOnboarding(true)} />
       </>
     );
   }

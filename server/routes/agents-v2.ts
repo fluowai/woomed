@@ -7,6 +7,9 @@ import {
 import { executeAction, getActionHandlers } from "../modules/agent-actions";
 import { processIncomingMessage } from "../modules/agent-router";
 import { loadData } from "../data";
+import { saveData } from "../data";
+import { pauseAi, resumeAi } from "../modules/agent-control";
+import { nowIso } from "../helpers";
 
 export function registerAgentRoutes(app: Express) {
   // === AGENT RUNTIME API ===
@@ -39,6 +42,31 @@ export function registerAgentRoutes(app: Express) {
   app.get("/api/v2/agents/actions/types", requireAuth, async (_req, res) => {
     const types = getActionHandlers();
     res.json({ types });
+  });
+
+  // Human handoff / AI pause controls
+  app.get("/api/v2/agents/conversation-controls", requireAuth, async (_req, res) => {
+    const data = await loadData();
+    res.json({ controls: data.agentConversationControls || [] });
+  });
+
+  app.post("/api/v2/agents/conversation-controls/:contactId/pause", requireAuth, async (req: AuthedRequest, res) => {
+    const control = await pauseAi({
+      contactId: req.params.contactId,
+      connectionId: req.body?.connectionId,
+      contactPhone: req.body?.contactPhone || req.params.contactId,
+      channel: "whatsapp",
+      reason: req.body?.reason || "pausa_manual",
+      pausedBy: req.user?.name || "usuario",
+      resumeAt: req.body?.resumeAt,
+    });
+    res.json({ control });
+  });
+
+  app.post("/api/v2/agents/conversation-controls/:contactId/resume", requireAuth, async (req: AuthedRequest, res) => {
+    const control = await resumeAi(req.params.contactId, req.body?.connectionId, req.user?.name || "usuario");
+    if (!control) return res.status(404).json({ error: "Controle de conversa nao encontrado" });
+    res.json({ control });
   });
 
   app.post("/api/v2/agents/actions", requireAuth, async (req: AuthedRequest, res) => {
@@ -100,6 +128,53 @@ export function registerAgentRoutes(app: Express) {
     const limit = Number(req.query.limit) || 100;
     const logs = await getExecutionLogs(agentId, limit);
     res.json({ logs });
+  });
+
+  // Procedure catalog used by procedure/beauty/aesthetics agents
+  app.get("/api/v2/agents/procedures", requireAuth, async (_req, res) => {
+    const data = await loadData();
+    res.json({ procedures: data.procedureCatalog || [] });
+  });
+
+  app.post("/api/v2/agents/procedures", requireAuth, async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const body = req.body || {};
+    const name = String(body.name || "").trim();
+    if (!name) return res.status(400).json({ error: "Nome do procedimento e obrigatorio" });
+    const now = nowIso();
+    const item = {
+      id: `proc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      aliases: Array.isArray(body.aliases) ? body.aliases.map(String) : [],
+      category: String(body.category || "Geral"),
+      specialty: String(body.specialty || "Geral"),
+      doctorId: body.doctorId ? String(body.doctorId) : undefined,
+      doctorName: body.doctorName ? String(body.doctorName) : undefined,
+      description: String(body.description || ""),
+      mediaUrl: body.mediaUrl ? String(body.mediaUrl) : undefined,
+      mediaType: body.mediaType || undefined,
+      mediaCaption: body.mediaCaption ? String(body.mediaCaption) : undefined,
+      price: body.price !== undefined ? Number(body.price) : undefined,
+      requiresEvaluation: body.requiresEvaluation !== false,
+      isActive: body.isActive !== false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    data.procedureCatalog = data.procedureCatalog || [];
+    data.procedureCatalog.push(item as any);
+    await saveData(data);
+    res.json({ procedure: item });
+  });
+
+  app.patch("/api/v2/agents/procedures/:id", requireAuth, async (req, res) => {
+    const data = await loadData();
+    const procedures = data.procedureCatalog || [];
+    const idx = procedures.findIndex(p => p.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: "Procedimento nao encontrado" });
+    procedures[idx] = { ...procedures[idx], ...req.body, updatedAt: nowIso() };
+    data.procedureCatalog = procedures;
+    await saveData(data);
+    res.json({ procedure: procedures[idx] });
   });
 
   // Metrics

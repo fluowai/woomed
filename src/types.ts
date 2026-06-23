@@ -168,6 +168,25 @@ export interface ServicePrice {
   category: string;
 }
 
+export interface ProcedureCatalogItem {
+  id: string;
+  name: string;
+  aliases: string[];
+  category: string;
+  specialty: string;
+  doctorId?: string;
+  doctorName?: string;
+  description: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'document';
+  mediaCaption?: string;
+  price?: number;
+  requiresEvaluation: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FinanceTransaction {
   id: string;
   date: string;
@@ -194,6 +213,25 @@ export interface ServiceAgent {
   rules: string[];
   knowledgeBase: string[];
   connectionId?: string;
+  createdAt: string;
+}
+
+export type AiServiceStatus = 'active' | 'paused';
+
+export interface AgentConversationControl {
+  id: string;
+  contactId: string;
+  contactPhone: string;
+  channel: ChannelType;
+  connectionId?: string;
+  aiService: AiServiceStatus;
+  pausedReason?: string;
+  pausedBy?: string;
+  pausedAt?: string;
+  resumeAt?: string;
+  lastHumanMessageAt?: string;
+  lastAiMessageAt?: string;
+  updatedAt: string;
   createdAt: string;
 }
 

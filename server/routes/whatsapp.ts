@@ -11,6 +11,8 @@ import {
 } from "../whatsapp-utils";
 import { WHATSMEOW_API_URL } from "../config";
 import { processIncomingMessage } from "../modules/agent-router";
+import { enqueueBufferedMessage } from "../modules/message-buffer";
+import { markAiMessage, pauseAi } from "../modules/agent-control";
 
 export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -188,6 +190,14 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
     conv.lastMessagePreview = text; conv.updatedAt = msg.timestamp; conv.unreadCount = 0;
     audit(data, req.user!, "send", "whatsapp_message", msg.id, conv.leadName);
     await saveData(data);
+    await pauseAi({
+      contactId: conv.jid,
+      contactPhone: conv.phone || conv.normalizedPhone || conv.jid,
+      channel: "whatsapp",
+      connectionId: conn.id,
+      reason: "mensagem_manual_atendente",
+      pausedBy: req.user?.name || "atendente",
+    });
     broadcastWhatsAppRealtime("whatsapp.message", { conversation: conv, message: msg });
     res.json({ conversation: conv, message: msg });
   });
@@ -249,8 +259,13 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
         try {
           const contactId = message.senderJid || conversation.jid || message.senderPhone || conversation.phone || "unknown";
           const senderName = message.senderDisplayName || conversation.pushName || conversation.leadName || "Contato";
+          const incomingText = message.body || (message.type !== "text" ? `[${message.type}] Paciente enviou uma midia${message.mediaFileName ? `: ${message.mediaFileName}` : ""}.` : "");
+          const buffered = await enqueueBufferedMessage(`${conn.id}:${contactId}`, incomingText);
+          if (!buffered.shouldProcess) {
+            return res.json({ ok: true, conversation, message, buffered: true });
+          }
           const result = await processIncomingMessage(
-            { text: message.body || "", from: contactId, senderName, channel: "whatsapp", connectionId: conn.id },
+            { text: buffered.text, from: contactId, senderName, channel: "whatsapp", connectionId: conn.id },
             linkedAgent.id
           );
 
@@ -272,6 +287,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
             conversation.lastMessagePreview = result.reply;
             conversation.updatedAt = sentMsg.timestamp;
             await saveData(data);
+            await markAiMessage(contactId, conn.id);
             broadcastWhatsAppRealtime("whatsapp.message", { conversation, message: sentMsg });
           }
         } catch (err) {
