@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, validatePassword, generateTokens, rotateR
 import { createUser, updateUser, deleteUser, listUsers, generateInvite } from "../users";
 import { registerConsent, getPatientConsents } from "../lgpd";
 import { createBackup, listBackups, restoreBackup, scheduleAutoBackup } from "../backup";
-import { ensureCoreAuthSchema, isDatabaseAvailable, queryOne, query } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, isSupabaseRestAvailable, queryOne, query, supabaseRestFindOne } from "../database";
 
 interface DbUser {
   id: string;
@@ -27,6 +27,9 @@ async function findUserByEmail(email: string) {
     await ensureCoreAuthSchema();
     return queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
   }
+  if (isSupabaseRestAvailable()) {
+    return supabaseRestFindOne<DbUser>("users", `select=*&email=eq.${encodeURIComponent(email.trim().toLowerCase())}`);
+  }
   const data = await loadData();
   return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 }
@@ -41,6 +44,10 @@ async function hasConfiguredSuperAdmin() {
       if (row?.exists) return true;
     } catch { /* fallthrough */ }
   }
+  if (isSupabaseRestAvailable()) {
+    const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
+    if (row) return true;
+  }
   const data = await loadData();
   return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
 }
@@ -52,6 +59,9 @@ async function findUserById(id: string) {
       const row = await queryOne<DbUser>("SELECT * FROM users WHERE id = $1", [id]);
       if (row) return row;
     } catch { /* fallthrough */ }
+  }
+  if (isSupabaseRestAvailable()) {
+    return supabaseRestFindOne<DbUser>("users", `select=*&id=eq.${encodeURIComponent(id)}`);
   }
   const data = await loadData();
   return data.users.find(u => u.id === id);

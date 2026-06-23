@@ -3,7 +3,7 @@ import fs from "fs";
 import { Express } from "express";
 import { loadData, saveData, dataFile, invalidateCache } from "../data";
 import { hashPassword, generateTokens } from "../auth";
-import { ensureCoreAuthSchema, isDatabaseAvailable, query, queryOne } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, isSupabaseRestAvailable, query, queryOne, supabaseRestFindOne, supabaseRestInsert } from "../database";
 
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
@@ -14,6 +14,10 @@ async function hasConfiguredSuperAdmin() {
       );
       if (row?.exists) return true;
     } catch { /* fallthrough */ }
+  }
+  if (isSupabaseRestAvailable()) {
+    const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
+    if (row) return true;
   }
   const data = await loadData();
   return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
@@ -72,6 +76,22 @@ export function registerSetupRoutes(app: Express) {
       } catch (error) {
         const detail = error instanceof Error ? error.message : "Erro desconhecido";
         return res.status(500).json({ error: `Nao foi possivel criar o super admin no banco: ${detail}` });
+      }
+    } else if (isSupabaseRestAvailable()) {
+      try {
+        await supabaseRestInsert("users", {
+          id,
+          tenant_id: null,
+          email,
+          name: appUser.name,
+          password_hash: passwordHash,
+          role: "super_admin",
+          is_active: true,
+          mfa_enabled: false
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Erro desconhecido";
+        return res.status(500).json({ error: `Nao foi possivel criar o super admin no Supabase REST: ${detail}` });
       }
     }
 

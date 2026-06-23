@@ -68,7 +68,58 @@ function getPool(): Pool {
 }
 
 export function isDatabaseAvailable(): boolean {
-  return Boolean(DATABASE_URL);
+  return /^postgres(ql)?:\/\//i.test(DATABASE_URL);
+}
+
+export function getSupabaseRestUrl(): string {
+  const configured = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  const fromDatabaseUrl = /^https?:\/\//i.test(DATABASE_URL) ? DATABASE_URL : "";
+  const url = configured || fromDatabaseUrl;
+  return url.replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
+}
+
+export function getSupabaseServiceKey(): string {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_ROLE
+    || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY
+    || "";
+}
+
+export function isSupabaseRestAvailable(): boolean {
+  return Boolean(getSupabaseRestUrl() && getSupabaseServiceKey());
+}
+
+async function supabaseRestRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const url = getSupabaseRestUrl();
+  const key = getSupabaseServiceKey();
+  if (!url || !key) throw new Error("Supabase REST URL/service role key not configured.");
+  const headers = new Headers(init.headers);
+  headers.set("apikey", key);
+  headers.set("Authorization", `Bearer ${key}`);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${url}/rest/v1/${path.replace(/^\/+/, "")}`, { ...init, headers });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    const message = data?.message || data?.hint || text || `Supabase REST error ${response.status}`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+export async function supabaseRestFindOne<T>(table: string, queryString: string): Promise<T | null> {
+  const rows = await supabaseRestRequest<T[]>(`${table}?${queryString}&limit=1`);
+  return rows[0] || null;
+}
+
+export async function supabaseRestInsert<T>(table: string, row: Record<string, unknown>): Promise<T> {
+  const rows = await supabaseRestRequest<T[]>(table, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(row)
+  });
+  return rows[0] as T;
 }
 
 export async function query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> {

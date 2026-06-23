@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData } from "../data";
 import { generateTokens, hashPassword, validatePassword } from "../auth";
-import { ensureCoreAuthSchema, isDatabaseAvailable, query, queryOne } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, isSupabaseRestAvailable, query, queryOne, supabaseRestFindOne, supabaseRestInsert } from "../database";
 import { nowIso } from "../helpers";
 import { mergeDefaultPlans } from "../saas-defaults";
 import { AppUser, Tenant } from "../../src/types";
@@ -61,6 +61,9 @@ export function registerOnboardingRoutes(app: Express) {
     if (isDatabaseAvailable()) {
       const existingDbUser = await queryOne<{ id: string }>("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [normalizedEmail]);
       if (existingDbUser) return res.status(409).json({ error: "Ja existe um usuario com este email." });
+    } else if (isSupabaseRestAvailable()) {
+      const existingRestUser = await supabaseRestFindOne<{ id: string }>("users", `select=id&email=eq.${encodeURIComponent(normalizedEmail)}`);
+      if (existingRestUser) return res.status(409).json({ error: "Ja existe um usuario com este email." });
     }
 
     const baseSlug = slugify(String(slug || clinicName));
@@ -71,6 +74,9 @@ export function registerOnboardingRoutes(app: Express) {
     if (isDatabaseAvailable()) {
       const existingDbTenant = await queryOne<{ id: string }>("SELECT id FROM tenants WHERE LOWER(slug) = LOWER($1)", [baseSlug]);
       if (existingDbTenant) return res.status(409).json({ error: "Ja existe uma clinica com este subdominio." });
+    } else if (isSupabaseRestAvailable()) {
+      const existingRestTenant = await supabaseRestFindOne<{ id: string }>("tenants", `select=id&slug=eq.${encodeURIComponent(baseSlug)}`);
+      if (existingRestTenant) return res.status(409).json({ error: "Ja existe uma clinica com este subdominio." });
     }
 
     const selectedPlan = planId ? data.plans.find(plan => plan.id === planId && plan.isActive) : data.plans.find(plan => plan.code === "STARTER");
@@ -136,6 +142,36 @@ export function registerOnboardingRoutes(app: Express) {
       } catch (error) {
         const detail = error instanceof Error ? error.message : "Erro desconhecido";
         return res.status(500).json({ error: `Nao foi possivel criar a clinica no banco de dados: ${detail}` });
+      }
+    } else if (isSupabaseRestAvailable()) {
+      try {
+        await supabaseRestInsert("tenants", {
+          id: tenant.id,
+          slug: tenant.slug,
+          legal_name: tenant.legalName,
+          trade_name: tenant.tradeName,
+          document: tenant.document || null,
+          owner_email: tenant.ownerEmail || null,
+          phone: tenant.phone || null,
+          status: "trialing",
+          timezone: "America/Sao_Paulo",
+          locale: "pt-BR",
+          settings: tenant.settings
+        });
+        await supabaseRestInsert("users", {
+          id: appUser.id,
+          tenant_id: tenant.id,
+          email: appUser.email,
+          name: appUser.name,
+          password_hash: passwordHash,
+          role: "admin",
+          specialty: null,
+          is_active: true,
+          mfa_enabled: false
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Erro desconhecido";
+        return res.status(500).json({ error: `Nao foi possivel criar a clinica no Supabase REST: ${detail}` });
       }
     }
 

@@ -92,7 +92,8 @@ async function request<T>(path: string, token: string | null, init: RequestInit 
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || 'Erro ao comunicar com o servidor.');
+    const detail = [data.code, data.error, data.detail].filter(Boolean).join(' - ');
+    throw new Error(detail || 'Erro ao comunicar com o servidor.');
   }
   return data as T;
 }
