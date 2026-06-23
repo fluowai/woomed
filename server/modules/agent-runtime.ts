@@ -20,7 +20,13 @@ interface RuntimeData {
 }
 
 function getRuntime(data: AppData): RuntimeData {
-  return (data as any).__agentRuntime || { sessions: [], actions: [], executionLogs: [], leads: [] };
+  const raw = (data as any).__agentRuntime || {};
+  return {
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+    actions: Array.isArray(raw.actions) ? raw.actions : [],
+    executionLogs: Array.isArray(raw.executionLogs) ? raw.executionLogs : [],
+    leads: Array.isArray(raw.leads) ? raw.leads : [],
+  };
 }
 
 function setRuntime(data: AppData, rt: RuntimeData) {

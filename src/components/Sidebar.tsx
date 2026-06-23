@@ -56,7 +56,6 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   { icon: Bot, label: 'Central de Agentes', view: 'Central de Agentes' },
   { icon: Activity, label: 'Pipeline', view: 'Pipeline Agentes' },
   { icon: ListTodo, label: 'Pipeline SDR', view: 'Pipeline SDR' },
-  { icon: MessageSquareText, label: 'Conversas', view: 'Conversas Agentes' },
   { icon: PieChart, label: 'Métricas', view: 'Métricas Agentes' },
   { icon: Send, label: 'Follow-ups', view: 'Follow-ups' },
   { icon: DatabaseZap, label: 'Neural', view: 'Neural' },

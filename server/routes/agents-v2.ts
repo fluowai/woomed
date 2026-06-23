@@ -11,6 +11,16 @@ import { saveData } from "../data";
 import { pauseAi, resumeAi } from "../modules/agent-control";
 import { nowIso } from "../helpers";
 
+function runtimeOf(data: any) {
+  const raw = data.__agentRuntime || {};
+  return {
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+    actions: Array.isArray(raw.actions) ? raw.actions : [],
+    executionLogs: Array.isArray(raw.executionLogs) ? raw.executionLogs : [],
+    leads: Array.isArray(raw.leads) ? raw.leads : [],
+  };
+}
+
 export function registerAgentRoutes(app: Express) {
   // === AGENT RUNTIME API ===
 
@@ -35,7 +45,7 @@ export function registerAgentRoutes(app: Express) {
   // Actions
   app.get("/api/v2/agents/actions", requireAuth, async (_req, res) => {
     const data = await loadData();
-    const rt = (data as any).__agentRuntime || { actions: [] };
+    const rt = runtimeOf(data);
     res.json({ actions: rt.actions });
   });
 
@@ -101,7 +111,7 @@ export function registerAgentRoutes(app: Express) {
 
   app.get("/api/v2/agents/leads/:id", requireAuth, async (req, res) => {
     const data = await loadData();
-    const rt = (data as any).__agentRuntime || { leads: [] };
+    const rt = runtimeOf(data);
     const lead = rt.leads.find((l: any) => l.id === req.params.id);
     if (!lead) return res.status(404).json({ error: "Lead nao encontrado" });
     res.json({ lead });
@@ -180,7 +190,7 @@ export function registerAgentRoutes(app: Express) {
   // Metrics
   app.get("/api/v2/agents/metrics", requireAuth, async (_req, res) => {
     const data = await loadData();
-    const rt = (data as any).__agentRuntime || { sessions: [], actions: [], executionLogs: [], leads: [] };
+    const rt = runtimeOf(data);
     const agents = data.serviceAgents.filter(a => a.status === "active");
 
     const metrics = agents.map(agent => {
@@ -237,7 +247,7 @@ export function registerAgentRoutes(app: Express) {
   // Pipeline summary (for dashboard)
   app.get("/api/v2/agents/pipeline", requireAuth, async (_req, res) => {
     const data = await loadData();
-    const rt = (data as any).__agentRuntime || { leads: [], sessions: [] };
+    const rt = runtimeOf(data);
 
     const stages = ["novo", "contatado", "qualificado", "agendando", "agendado", "convertido", "perdido"];
     const pipeline = stages.map(stage => ({

@@ -264,6 +264,130 @@ export async function runMigrations(): Promise<void> {
           ip_address TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `},
+      { name: "002_operational_ai_tables", sql: `
+        CREATE TABLE IF NOT EXISTS service_agents (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          name TEXT NOT NULL,
+          channel TEXT NOT NULL DEFAULT 'whatsapp',
+          objective TEXT NOT NULL DEFAULT '',
+          tone TEXT NOT NULL DEFAULT 'profissional',
+          status TEXT NOT NULL DEFAULT 'draft',
+          escalation_to TEXT,
+          working_hours TEXT,
+          rules TEXT[] DEFAULT '{}',
+          knowledge_base TEXT[] DEFAULT '{}',
+          connection_id TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS llm_provider_configs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          name TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          api_key_masked TEXT,
+          endpoint TEXT,
+          temperature NUMERIC DEFAULT 0.35,
+          max_tokens INTEGER DEFAULT 1200,
+          is_default BOOLEAN DEFAULT FALSE,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS neural_knowledge (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          title TEXT NOT NULL,
+          category TEXT,
+          content TEXT NOT NULL DEFAULT '',
+          source_type TEXT,
+          source_url TEXT,
+          target_agent_ids TEXT[] DEFAULT '{}',
+          tags TEXT[] DEFAULT '{}',
+          status TEXT DEFAULT 'active',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS marketing_campaigns (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          name TEXT NOT NULL,
+          audience TEXT,
+          channel TEXT,
+          status TEXT DEFAULT 'draft',
+          goal TEXT,
+          scheduled_date TEXT,
+          budget NUMERIC DEFAULT 0,
+          leads INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS tiss_guides (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          patient_name TEXT NOT NULL,
+          operator TEXT,
+          procedure TEXT,
+          status TEXT DEFAULT 'draft',
+          value NUMERIC DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS inventory_items (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          name TEXT NOT NULL,
+          category TEXT,
+          quantity INTEGER DEFAULT 0,
+          min_quantity INTEGER DEFAULT 0,
+          unit TEXT,
+          expires_at TEXT,
+          supplier TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS referral_records (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          patient_name TEXT NOT NULL,
+          referred_name TEXT,
+          status TEXT DEFAULT 'pending',
+          reward TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS reference_materials (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          title TEXT NOT NULL,
+          category TEXT,
+          url TEXT,
+          summary TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS help_tickets (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID REFERENCES tenants(id),
+          title TEXT NOT NULL,
+          module TEXT,
+          priority TEXT DEFAULT 'normal',
+          status TEXT DEFAULT 'open',
+          description TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `}
     ];
 

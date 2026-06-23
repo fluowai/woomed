@@ -239,7 +239,7 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh }: SaaSAdmi
       {/* Header */}
       <div className="relative pt-12 pb-24 px-10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-900/40 to-indigo-900/40 z-0"></div>
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay z-0"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_22%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.16),transparent_24%)] opacity-60 mix-blend-overlay z-0"></div>
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-40 animate-pulse"></div>
         <div className="absolute top-12 -left-24 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-40"></div>
 
