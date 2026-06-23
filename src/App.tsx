@@ -907,7 +907,10 @@ export default function App() {
 
   if (!authToken || !currentUser) {
     if (needsSetup) {
-      return <SetupWizard onComplete={handleSetupComplete} />;
+      if (showClinicOnboarding) {
+        return <ClinicOnboarding onBack={() => setShowClinicOnboarding(false)} onComplete={handleLogin} />;
+      }
+      return <SetupWizard onComplete={handleSetupComplete} onSignup={() => setShowClinicOnboarding(true)} />;
     }
     if (showClinicOnboarding) {
       return <ClinicOnboarding onBack={() => setShowClinicOnboarding(false)} onComplete={handleLogin} />;

@@ -4,9 +4,10 @@ import { apiPost } from '../api';
 
 interface SetupWizardProps {
   onComplete: (token: string, user: { id: string; name: string; role: string }) => void;
+  onSignup?: () => void;
 }
 
-export default function SetupWizard({ onComplete }: SetupWizardProps) {
+export default function SetupWizard({ onComplete, onSignup }: SetupWizardProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -114,6 +115,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-teal-100">
               {isLoading ? 'Criando...' : 'Criar Super Admin'}
             </button>
+            {onSignup && (
+              <button type="button" onClick={onSignup} className="w-full text-sm font-black text-teal-700 hover:text-teal-800 transition-colors">
+                Criar conta para minha clinica
+              </button>
+            )}
           </div>
         </form>
       </div>
