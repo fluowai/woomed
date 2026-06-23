@@ -148,7 +148,7 @@ export function registerPhase1Routes(app: Express) {
     } catch (error) {
       console.error("[Auth] login failed", error);
       res.status(500).json({
-        error: "Erro interno no login. Verifique DATABASE_URL e schema do Supabase.",
+        error: "Erro interno no login. Verifique DATABASE_URL e schema do PostgreSQL interno.",
         code: "AUTH_INTERNAL_ERROR",
         detail: error instanceof Error ? error.message : String(error)
       });

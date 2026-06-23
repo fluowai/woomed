@@ -23,6 +23,7 @@ import { startScheduler } from "./server/modules/scheduler";
 import type { Express } from "express";
 
 const requestId = () => Math.random().toString(36).slice(2, 10);
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function errorHandler(err: any, req: express.Request, res: express.Response, _next: express.NextFunction) {
   console.error(`[${requestId()}] ${err?.message || err}`);
@@ -51,8 +52,8 @@ async function startServer() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https://api.dicebear.com", "https://*.supabase.co"],
-        connectSrc: ["'self'", "ws:", "wss:", "https://*.supabase.co", "https://api.openai.com", "https://api.anthropic.com", "https://api.groq.com", "https://generativelanguage.googleapis.com"],
+        imgSrc: ["'self'", "data:", "https://api.dicebear.com"],
+        connectSrc: ["'self'", "ws:", "wss:", "https://api.openai.com", "https://api.anthropic.com", "https://api.groq.com", "https://generativelanguage.googleapis.com"],
         fontSrc: ["'self'", "data:"],
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
@@ -91,12 +92,23 @@ async function startServer() {
 
   // Database
   if (isDatabaseAvailable()) {
-    try {
-      await runMigrations();
-      await runSeed();
-      console.log("PostgreSQL connected and migrations applied.");
-    } catch (error) {
-      console.error("PostgreSQL migration failed, falling back to JSON storage:", error);
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 30; attempt += 1) {
+      try {
+        await runMigrations();
+        await runSeed();
+        console.log("PostgreSQL connected and migrations applied.");
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        console.warn(`PostgreSQL not ready yet (${attempt}/30):`, error instanceof Error ? error.message : error);
+        await sleep(2000);
+      }
+    }
+    if (lastError) {
+      console.error("PostgreSQL migration failed after retries:", lastError);
+      if (process.env.NODE_ENV === "production") throw lastError;
     }
   } else {
     console.log("No DATABASE_URL configured. Using JSON file storage.");

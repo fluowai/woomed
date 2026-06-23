@@ -44,8 +44,8 @@
                       │     │ │   (Go)      │
                       │     │ └─────────────┘
                       │  ┌──┴──────────────┐
-                      │  │   Supabase      │  PostgreSQL gerenciado
-                      │  │  (externo)      │  (pooler.supabase.com)
+                      |  |   postgres     |  PostgreSQL interno
+                      |  |  (stack)       |  volume postgres_data
                       │  └─────────────────┘
 ```
 
@@ -116,11 +116,10 @@ docker compose exec consultio-med node -e "console.log('ok')"
 docker compose exec postgres pg_dump -U consultio consultio > backup.sql
 ```
 
-### Modo Supabase (sem PostgreSQL local)
+### Banco interno da stack
 
-```bash
-docker compose -f docker-compose.supabase.yml up --build -d
-```
+O modo recomendado usa PostgreSQL interno. Nao use o arquivo
+`docker-compose.supabase.yml` se a exigencia for manter tudo dentro da stack.
 
 ## 3. Deploy Producao (Portainer)
 
@@ -146,7 +145,7 @@ Envie o codigo para um repositorio Git (GitHub, GitLab, etc.).
    - **Repository URL**: URL do seu repositorio
    - **Repository reference**: `refs/heads/codex/beta-test-hardening` (ou sua branch)
    - **Compose path**: `deploy/portainer-stack.yml`
-4. As variaveis de ambiente ja estao preenchidas com valores default no proprio YAML. Para sobrescrever, va em **Environment variables** e adicione somente as que deseja alterar.
+4. Configure as variaveis de ambiente da stack, principalmente `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_MASTER_KEY`, `WHATSMEOW_WEBHOOK_SECRET` e `PLATFORM_OWNER_PASSWORD`.
 5. Para deploy com dominio real, configure:
    - **APP_DOMAIN**: `https://woomed.consultio.com.br`
    - **ACME_EMAIL**: `admin@consultio.com.br`
@@ -227,14 +226,10 @@ Para rotacionar o JWT_SECRET sem invalidar sessoes ativas:
 
 ### Conexao com banco
 
-**Opcao 1 - PostgreSQL interno (Docker):**
-- O compose ja monta automaticamente com `DB_PASSWORD`
-- `DATABASE_URL` e gerada automaticamente
-
-**Opcao 2 - Supabase:**
-- Obtenha a string em: Supabase > Settings > Database > Connection string
-- Preencha `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, etc.
-- Use `docker-compose.supabase.yml` se nao quiser PostgreSQL local
+**PostgreSQL interno (Docker/Portainer):**
+- A stack cria o servico `postgres`.
+- A API usa `DATABASE_URL=postgresql://consultio:${DB_PASSWORD}@postgres:5432/consultio`.
+- Nenhuma chave Supabase e necessaria.
 
 ### Opcionais
 
@@ -243,6 +238,7 @@ Para rotacionar o JWT_SECRET sem invalidar sessoes ativas:
 | `GEMINI_API_KEY` | Chave da API Gemini (Google AI Studio) | vazio (IA desligada) |
 | `APP_URL` | URL publica da aplicacao | http://localhost:5173 |
 | `PLATFORM_OWNER_EMAIL` | Email do dono da plataforma | owner@consultio.local |
+| `PLATFORM_OWNER_PASSWORD` | Senha inicial do super admin criado no Postgres interno | vazio (usa onboarding/setup) |
 | `WHATSMEOW_API_TOKEN` | Token de autenticacao do bridge | vazio (sem autenticacao) |
 | `CORS_ORIGIN` | Origem permitida no CORS | true (tudo) |
 

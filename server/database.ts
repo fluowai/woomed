@@ -1,4 +1,5 @@
 import { Pool, QueryResult } from "pg";
+import bcrypt from "bcryptjs";
 import { seedUsers } from "./seed";
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -305,6 +306,33 @@ export async function runSeed(): Promise<void> {
           [tenantId, user.email, user.name, user.passwordHash, user.role, user.specialty || null, user.isActive]
         );
       }
+    }
+
+    const ownerEmail = process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase();
+    const ownerPassword = process.env.PLATFORM_OWNER_PASSWORD;
+    if (ownerEmail && ownerPassword) {
+      const ownerHash = bcrypt.hashSync(ownerPassword, 10);
+      const exists = await client.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [ownerEmail]);
+      if (exists.rows.length > 0) {
+        await client.query(
+          `UPDATE users
+           SET tenant_id = NULL,
+               name = COALESCE(NULLIF(name, ''), 'Super Admin'),
+               password_hash = $1,
+               role = 'super_admin',
+               is_active = TRUE,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [ownerHash, exists.rows[0].id]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO users (tenant_id, email, name, password_hash, role, specialty, is_active)
+           VALUES (NULL, $1, 'Super Admin', $2, 'super_admin', NULL, TRUE)`,
+          [ownerEmail, ownerHash]
+        );
+      }
+      console.log(`Platform owner ensured: ${ownerEmail}`);
     }
     console.log("Database seeded with default users.");
   } catch (error) {
