@@ -33,6 +33,19 @@ async function findUserByEmail(email: string) {
   return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 }
 
+async function hasConfiguredSuperAdmin() {
+  if (isDatabaseAvailable()) {
+    try {
+      const row = await queryOne<{ exists: boolean }>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
+      );
+      if (row?.exists) return true;
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
+}
+
 async function findUserById(id: string) {
   if (isDatabaseAvailable()) {
     try {
@@ -81,8 +94,7 @@ export function registerPhase1Routes(app: Express) {
   // === AUTH (JWT) ===
   app.post("/api/v2/auth/login", async (req, res) => {
     const data = await loadData();
-    const hasSuperAdmin = data.users.some(u => u.role === "super_admin" && u.isActive !== false);
-    if (!hasSuperAdmin) {
+    if (!(await hasConfiguredSuperAdmin())) {
       return res.status(400).json({ error: "Nenhum super admin configurado. Complete o setup primeiro.", code: "SETUP_REQUIRED" });
     }
 

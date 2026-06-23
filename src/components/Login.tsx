@@ -19,6 +19,7 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     fetchLoginUsers()
       .then(data => {
         setUsers(data);

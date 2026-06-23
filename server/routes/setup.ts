@@ -3,12 +3,24 @@ import fs from "fs";
 import { Express } from "express";
 import { loadData, saveData, dataFile, invalidateCache } from "../data";
 import { hashPassword, generateTokens } from "../auth";
+import { isDatabaseAvailable, query, queryOne } from "../database";
+
+async function hasConfiguredSuperAdmin() {
+  if (isDatabaseAvailable()) {
+    try {
+      const row = await queryOne<{ exists: boolean }>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
+      );
+      if (row?.exists) return true;
+    } catch { /* fallthrough */ }
+  }
+  const data = await loadData();
+  return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
+}
 
 export function registerSetupRoutes(app: Express) {
   app.get("/api/v2/setup/status", async (_req, res) => {
-    const data = await loadData();
-    const hasSuperAdmin = data.users.some(u => u.role === "super_admin" && u.isActive !== false);
-    res.json({ needsSetup: !hasSuperAdmin });
+    res.json({ needsSetup: !(await hasConfiguredSuperAdmin()) });
   });
 
   app.post("/api/v2/setup/reset", async (_req, res) => {
@@ -25,8 +37,7 @@ export function registerSetupRoutes(app: Express) {
 
   app.post("/api/v2/setup/complete", async (req, res) => {
     const data = await loadData();
-    const hasSuperAdmin = data.users.some(u => u.role === "super_admin" && u.isActive !== false);
-    if (hasSuperAdmin) {
+    if (await hasConfiguredSuperAdmin()) {
       return res.status(400).json({ error: "Super admin ja configurado. Faca login." });
     }
 
@@ -38,15 +49,29 @@ export function registerSetupRoutes(app: Express) {
       return res.status(400).json({ error: "Senha deve ter pelo menos 6 caracteres." });
     }
 
-    const id = "u-" + crypto.randomUUID().slice(0, 8);
+    const id = crypto.randomUUID();
+    const passwordHash = hashPassword(password);
     const appUser = {
       id,
       name: name || "Super Administrador",
       role: "super_admin" as const,
       email,
-      passwordHash: hashPassword(password),
+      passwordHash,
       isActive: true,
     };
+
+    if (isDatabaseAvailable()) {
+      try {
+        await query(
+          `INSERT INTO users (id, tenant_id, email, name, password_hash, role, is_active)
+           VALUES ($1, NULL, $2, $3, $4, 'super_admin', TRUE)`,
+          [id, email, appUser.name, passwordHash]
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Erro desconhecido";
+        return res.status(500).json({ error: `Nao foi possivel criar o super admin no banco: ${detail}` });
+      }
+    }
 
     data.users.push({ ...appUser, pin: "" });
     data.platformOwners.push({

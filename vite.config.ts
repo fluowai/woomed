@@ -11,6 +11,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'auto',
         includeAssets: ['pwa-icon.svg'],
         manifest: {
           name: 'Consultio Med',
@@ -48,6 +49,9 @@ export default defineConfig(() => {
           ]
         },
         workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
           globPatterns: ['**/*.{js,css,html,svg,png,ico,json}'],
           runtimeCaching: [
             {
