@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, validatePassword, generateTokens, rotateR
 import { createUser, updateUser, deleteUser, listUsers, generateInvite } from "../users";
 import { registerConsent, getPatientConsents } from "../lgpd";
 import { createBackup, listBackups, restoreBackup, scheduleAutoBackup } from "../backup";
-import { isDatabaseAvailable, queryOne, query } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, queryOne, query } from "../database";
 
 interface DbUser {
   id: string;
@@ -25,6 +25,7 @@ interface DbUser {
 async function findUserByEmail(email: string) {
   if (isDatabaseAvailable()) {
     try {
+      await ensureCoreAuthSchema();
       const row = await queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
       if (row) return row;
     } catch { /* fallthrough */ }
@@ -36,6 +37,7 @@ async function findUserByEmail(email: string) {
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
     try {
+      await ensureCoreAuthSchema();
       const row = await queryOne<{ exists: boolean }>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
       );
@@ -49,6 +51,7 @@ async function hasConfiguredSuperAdmin() {
 async function findUserById(id: string) {
   if (isDatabaseAvailable()) {
     try {
+      await ensureCoreAuthSchema();
       const row = await queryOne<DbUser>("SELECT * FROM users WHERE id = $1", [id]);
       if (row) return row;
     } catch { /* fallthrough */ }

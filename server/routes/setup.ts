@@ -3,11 +3,12 @@ import fs from "fs";
 import { Express } from "express";
 import { loadData, saveData, dataFile, invalidateCache } from "../data";
 import { hashPassword, generateTokens } from "../auth";
-import { isDatabaseAvailable, query, queryOne } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, query, queryOne } from "../database";
 
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
     try {
+      await ensureCoreAuthSchema();
       const row = await queryOne<{ exists: boolean }>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
       );
@@ -62,6 +63,7 @@ export function registerSetupRoutes(app: Express) {
 
     if (isDatabaseAvailable()) {
       try {
+        await ensureCoreAuthSchema();
         await query(
           `INSERT INTO users (id, tenant_id, email, name, password_hash, role, is_active)
            VALUES ($1, NULL, $2, $3, $4, 'super_admin', TRUE)`,

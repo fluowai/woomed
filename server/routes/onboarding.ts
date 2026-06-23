@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData } from "../data";
 import { generateTokens, hashPassword, validatePassword } from "../auth";
-import { isDatabaseAvailable, query, queryOne } from "../database";
+import { ensureCoreAuthSchema, isDatabaseAvailable, query, queryOne } from "../database";
 import { nowIso } from "../helpers";
 import { mergeDefaultPlans } from "../saas-defaults";
 import { AppUser, Tenant } from "../../src/types";
@@ -52,6 +52,9 @@ export function registerOnboardingRoutes(app: Express) {
     if (passwordError) return res.status(400).json({ error: passwordError });
 
     const normalizedEmail = String(ownerEmail).trim().toLowerCase();
+    if (isDatabaseAvailable()) {
+      await ensureCoreAuthSchema();
+    }
     if (data.users.some(user => user.email?.toLowerCase() === normalizedEmail)) {
       return res.status(409).json({ error: "Ja existe um usuario com este email." });
     }

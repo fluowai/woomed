@@ -5,6 +5,61 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 
 let pool: Pool | null = null;
 
+const CORE_SCHEMA_SQL = `
+  CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+  CREATE TABLE IF NOT EXISTS tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
+    legal_name TEXT NOT NULL,
+    trade_name TEXT NOT NULL,
+    document TEXT,
+    owner_email TEXT,
+    phone TEXT,
+    status TEXT DEFAULT 'active',
+    timezone TEXT DEFAULT 'America/Sao_Paulo',
+    locale TEXT DEFAULT 'pt-BR',
+    settings JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id),
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'reception',
+    specialty TEXT,
+    mfa_secret TEXT,
+    mfa_enabled BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS document TEXT;
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_email TEXT;
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT;
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/Sao_Paulo';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT 'pt-BR';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id);
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'reception';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS specialty TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT FALSE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+`;
+
 function getPool(): Pool {
   if (!pool) {
     pool = new Pool({ connectionString: DATABASE_URL });
@@ -36,11 +91,18 @@ export async function endPool(): Promise<void> {
   }
 }
 
+export async function ensureCoreAuthSchema(): Promise<void> {
+  if (!isDatabaseAvailable()) return;
+  await getPool().query(CORE_SCHEMA_SQL);
+}
+
 export async function runMigrations(): Promise<void> {
   if (!isDatabaseAvailable()) return;
 
   const client = await getPool().connect();
   try {
+    await client.query(CORE_SCHEMA_SQL);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id SERIAL PRIMARY KEY,
@@ -51,36 +113,7 @@ export async function runMigrations(): Promise<void> {
 
     const migrationFiles = [
       { name: "001_initial_schema", sql: `
-        CREATE TABLE IF NOT EXISTS tenants (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          slug TEXT UNIQUE NOT NULL,
-          legal_name TEXT NOT NULL,
-          trade_name TEXT NOT NULL,
-          document TEXT,
-          owner_email TEXT,
-          phone TEXT,
-          status TEXT DEFAULT 'active',
-          timezone TEXT DEFAULT 'America/Sao_Paulo',
-          locale TEXT DEFAULT 'pt-BR',
-          settings JSONB DEFAULT '{}',
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS users (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          tenant_id UUID REFERENCES tenants(id),
-          email TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          password_hash TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'reception',
-          specialty TEXT,
-          mfa_secret TEXT,
-          mfa_enabled BOOLEAN DEFAULT FALSE,
-          is_active BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        ${CORE_SCHEMA_SQL}
 
         CREATE TABLE IF NOT EXISTS patients (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
