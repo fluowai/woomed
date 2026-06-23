@@ -24,11 +24,8 @@ interface DbUser {
 
 async function findUserByEmail(email: string) {
   if (isDatabaseAvailable()) {
-    try {
-      await ensureCoreAuthSchema();
-      const row = await queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
-      if (row) return row;
-    } catch { /* fallthrough */ }
+    await ensureCoreAuthSchema();
+    return queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
   }
   const data = await loadData();
   return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
@@ -106,13 +103,21 @@ export function registerPhase1Routes(app: Express) {
 
     const dbRow = await findUserByEmail(email);
 
-    if (!dbRow || !((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
-      return res.status(401).json({ error: "Email ou senha invalidos." });
+    if (!dbRow) {
+      return res.status(401).json({ error: "Email ou senha invalidos.", code: "USER_NOT_FOUND" });
+    }
+
+    if ((dbRow as any).is_active === false || (dbRow as any).isActive === false) {
+      return res.status(401).json({ error: "Usuario inativo.", code: "USER_INACTIVE" });
+    }
+
+    if (!((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
+      return res.status(401).json({ error: "Senha nao configurada para este usuario.", code: "PASSWORD_HASH_MISSING" });
     }
 
     const passwordHash = (dbRow as any).password_hash || (dbRow as any).passwordHash;
     if (!verifyPassword(password, passwordHash)) {
-      return res.status(401).json({ error: "Email ou senha invalidos." });
+      return res.status(401).json({ error: "Email ou senha invalidos.", code: "PASSWORD_MISMATCH" });
     }
 
     const appUser = dbUserToApp(dbRow);
