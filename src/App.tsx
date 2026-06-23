@@ -89,6 +89,7 @@ export default function App() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [showClinicOnboarding, setShowClinicOnboarding] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>(getInitialView);
+  const [activeSaasSection, setActiveSaasSection] = useState<'overview' | 'tenants' | 'plans' | 'settings'>('overview');
   const [platformReturnToken, setPlatformReturnToken] = useState<string | null>(() => localStorage.getItem('consultio_platform_token'));
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -752,6 +753,7 @@ export default function App() {
             tenants={tenants}
             plans={plans}
             onAccessTenant={handleAccessTenant}
+            activeSection={activeSaasSection}
             onRefresh={async () => {
               try {
                 const state = await apiGet<BootstrapState>('/api/bootstrap', authToken);
@@ -1009,7 +1011,7 @@ export default function App() {
       <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
         setActiveView(view);
         setIsSidebarOpen(false);
-      }} userRole={currentUser?.role} userTenantId={currentUser?.tenantId} />
+      }} userRole={currentUser?.role} userTenantId={currentUser?.tenantId} activeSaasSection={activeSaasSection} onSaasSectionChange={setActiveSaasSection} />
       
       {/* Mobile sidebar overlay */}
       {isSidebarOpen && (

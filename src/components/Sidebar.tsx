@@ -3,6 +3,7 @@ import {
   Bot,
   Calendar, 
   ClipboardList, 
+  CreditCard,
   DatabaseZap,
   DollarSign, 
   FileText, 
@@ -82,10 +83,18 @@ interface SidebarProps {
   onNewAppointment: () => void;
   userRole?: string;
   userTenantId?: string;
+  activeSaasSection?: 'overview' | 'tenants' | 'plans' | 'settings';
+  onSaasSectionChange?: (section: 'overview' | 'tenants' | 'plans' | 'settings') => void;
 }
 
-export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId, activeSaasSection = 'overview', onSaasSectionChange }: SidebarProps) {
   const isPlatformAdmin = userRole === 'super_admin' && !userTenantId;
+  const saasSections = [
+    { icon: Activity, label: 'Visao Geral', id: 'overview' as const },
+    { icon: Building2, label: 'Clinicas', id: 'tenants' as const },
+    { icon: CreditCard, label: 'Planos', id: 'plans' as const },
+    { icon: ServerCog, label: 'Configuracoes', id: 'settings' as const },
+  ];
   const navItems = isPlatformAdmin
     ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType, superAdminOnly: true }]
     : allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
@@ -119,36 +128,65 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
           <span className="text-xl font-bold text-teal-900 tracking-tight">Consultio Med</span>
         </div>
 
-        <div className="px-4 mb-6">
-          <button 
-            onClick={onNewAppointment}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95"
-          >
-            <Plus size={20} />
-            <span>Novo atendimento</span>
-          </button>
-        </div>
+        {!isPlatformAdmin && (
+          <div className="px-4 mb-6">
+            <button
+              onClick={onNewAppointment}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 font-semibold shadow-md transition-all active:scale-95"
+            >
+              <Plus size={20} />
+              <span>Novo atendimento</span>
+            </button>
+          </div>
+        )}
 
         <nav className="flex-1 px-4 space-y-1 pb-10">
           {navItems.map((item) => (
-            <motion.button
-              key={item.label}
-              onClick={() => onViewChange(item.view)}
-              whileHover={{ x: 4 }}
-              className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
-                activeView === item.view 
-                  ? 'text-teal-700 bg-teal-50 font-bold' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-              }`}
-            >
-              <item.icon size={20} className={activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
-              <span className="text-sm font-medium">{item.label}</span>
-              {item.view === 'Follow-ups' && pendingFollowUps > 0 && (
-                <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {pendingFollowUps > 99 ? '99+' : pendingFollowUps}
-                </span>
+            <div key={item.label}>
+              <motion.button
+                onClick={() => onViewChange(item.view)}
+                whileHover={{ x: 4 }}
+                className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
+                  activeView === item.view
+                    ? 'text-teal-700 bg-teal-50 font-bold'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <item.icon size={20} className={activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
+                <span className="text-sm font-medium">{item.label}</span>
+                {item.view === 'Follow-ups' && pendingFollowUps > 0 && (
+                  <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {pendingFollowUps > 99 ? '99+' : pendingFollowUps}
+                  </span>
+                )}
+              </motion.button>
+
+              {isPlatformAdmin && item.view === 'Painel SaaS' && (
+                <div className="mt-2 ml-5 pl-3 border-l border-teal-100 space-y-1">
+                  {saasSections.map((section) => {
+                    const Icon = section.icon;
+                    const isActive = activeSaasSection === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        onClick={() => {
+                          onViewChange('Painel SaaS');
+                          onSaasSectionChange?.(section.id);
+                        }}
+                        className={`flex items-center w-full gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+                          isActive
+                            ? 'bg-teal-100 text-teal-800'
+                            : 'text-teal-700/70 hover:bg-teal-50 hover:text-teal-800'
+                        }`}
+                      >
+                        <Icon size={15} />
+                        <span>{section.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </motion.button>
+            </div>
           ))}
         </nav>
       </aside>
