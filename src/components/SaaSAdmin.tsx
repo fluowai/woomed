@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Building2, CreditCard, Users, Settings, Plus, Search, MoreVertical,
@@ -54,12 +54,11 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
   const [editingPlan, setEditingPlan] = useState<SaaSPlan | null>(null);
   const [planForm, setPlanForm] = useState({ code: '', name: '', description: '', priceCents: 0, currency: 'BRL', billingInterval: 'month' as 'month' | 'year', users: 1, patients: 100, whatsapp: false, ai: false });
 
-  useMemo(async () => {
+  useEffect(() => {
     if (token && activeTab === 'overview') {
-      try {
-        const response = await apiGet<StatsResponse>('/api/v2/saas/stats', token);
-        setStats(response.stats);
-      } catch { }
+      apiGet<StatsResponse>('/api/v2/saas/stats', token)
+        .then(response => setStats(response.stats))
+        .catch(() => undefined);
     }
   }, [token, activeTab]);
 
@@ -236,32 +235,29 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
   };
 
   return (
-    <div className="flex-1 bg-[#0B0F19] min-h-screen text-slate-200 flex flex-col font-sans overflow-y-auto">
+    <div className="flex-1 bg-[#0B0F19] min-h-screen text-slate-200 flex flex-col font-sans overflow-y-auto overscroll-contain">
       {/* Header */}
-      <div className="relative pt-12 pb-24 px-10 overflow-hidden">
+      <div className="relative pt-8 md:pt-12 pb-24 px-5 md:px-10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-900/40 to-indigo-900/40 z-0"></div>
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_22%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.16),transparent_24%)] opacity-60 mix-blend-overlay z-0"></div>
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-40 animate-pulse"></div>
-        <div className="absolute top-12 -left-24 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-40"></div>
-
-        <div className="relative z-10 flex justify-between items-end">
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
           <div>
             <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-100 to-slate-300 tracking-tight mb-3">
+              className="text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-100 to-slate-300 tracking-tight mb-3">
               Painel de Gestão SaaS
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="text-blue-200/80 text-lg font-medium max-w-2xl">
+              className="text-blue-200/80 text-base md:text-lg font-medium max-w-2xl">
               Administração master da plataforma WooMed. Gerencie clínicas, planos e assinaturas.
             </motion.p>
           </div>
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-            className="flex gap-4">
-            <button onClick={onRefresh} className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-white px-6 py-3 rounded-full font-semibold flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+            className="grid grid-cols-2 sm:flex gap-3 w-full lg:w-auto">
+            <button onClick={onRefresh} className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-white px-4 md:px-6 py-3 rounded-2xl md:rounded-full font-semibold flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(255,255,255,0.05)]">
               <RefreshCw size={18} />
               Atualizar
             </button>
-            <button onClick={openCreateTenant} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-6 py-3 rounded-full font-semibold flex items-center gap-2 transition-all shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+            <button onClick={openCreateTenant} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 md:px-6 py-3 rounded-2xl md:rounded-full font-semibold flex items-center justify-center gap-2 transition-all shadow-[0_0_30px_rgba(59,130,246,0.3)]">
               <Plus size={20} />
               Nova Clínica
             </button>
@@ -269,9 +265,9 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
         </div>
       </div>
 
-      <div className="px-10 -mt-12 relative z-20 flex-1 pb-12">
+      <div className="px-4 md:px-10 -mt-12 relative z-20 flex-1 pb-28 lg:pb-12 grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-5 md:gap-8 items-start">
         {/* Tabs */}
-        <div className="flex gap-2 p-1.5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl w-max mb-8 shadow-2xl">
+        <aside className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-2 shadow-2xl xl:sticky xl:top-6 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-1 gap-2">
           {[
             { id: 'overview' as const, label: 'Visão Geral', icon: Activity },
             { id: 'tenants' as const, label: 'Clínicas (Tenants)', icon: Building2 },
@@ -279,33 +275,33 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
             { id: 'settings' as const, label: 'Configurações', icon: Settings }
           ].map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-300 ${activeTab === tab.id ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+              className={`flex items-center justify-center xl:justify-start gap-2 px-3 md:px-5 py-3 rounded-2xl font-bold text-sm transition-all duration-300 min-w-0 ${activeTab === tab.id ? 'bg-gradient-to-r from-teal-500 to-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               <tab.icon size={18} /> {tab.label}
             </button>
           ))}
-        </div>
+        </aside>
 
-        <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        <motion.div className="min-w-0" key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
 
           {/* ===== OVERVIEW ===== */}
           {activeTab === 'overview' && (
             <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {[
                   { label: 'Total Clínicas', value: tenants.length, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-400/10' },
                   { label: 'Ativas', value: tenants.filter(t => t.status === 'active').length, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
                   { label: 'Em Trial', value: tenants.filter(t => t.status === 'trialing').length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-400/10' },
                   { label: 'Planos', value: plans.length, icon: CreditCard, color: 'text-purple-400', bg: 'bg-purple-400/10' }
                 ].map((stat, i) => (
-                  <div key={i} className="bg-[#131B2C] border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
+                  <div key={i} className="bg-[#131B2C] border border-white/5 rounded-3xl p-4 md:p-6 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent rounded-bl-full transition-transform group-hover:scale-110"></div>
                     <div className="flex items-start justify-between relative z-10">
                       <div>
-                        <p className="text-slate-400 font-medium mb-1">{stat.label}</p>
-                        <h3 className="text-3xl font-bold text-white">{stat.value}</h3>
+                        <p className="text-slate-400 font-medium mb-1 text-sm md:text-base">{stat.label}</p>
+                        <h3 className="text-2xl md:text-3xl font-bold text-white">{stat.value}</h3>
                       </div>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${stat.bg} ${stat.color}`}>
-                        <stat.icon size={24} />
+                      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center ${stat.bg} ${stat.color}`}>
+                        <stat.icon size={22} />
                       </div>
                     </div>
                   </div>
@@ -313,17 +309,17 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-[#131B2C] border border-white/5 rounded-3xl p-8">
+                <div className="bg-[#131B2C] border border-white/5 rounded-3xl p-5 md:p-8">
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                     <DollarSign className="text-emerald-500" /> Receita Recorrente (MRR)
                   </h3>
-                  <div className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300">
+                  <div className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300">
                     {formatCurrency(stats?.totalMRR || 0)}
                   </div>
                   <p className="text-slate-400 mt-2">Baseado nos planos ativos das clínicas</p>
                 </div>
 
-                <div className="bg-[#131B2C] border border-white/5 rounded-3xl p-8">
+                <div className="bg-[#131B2C] border border-white/5 rounded-3xl p-5 md:p-8">
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                     <TrendingUp className="text-blue-500" /> Últimas Atividades
                   </h3>
@@ -349,18 +345,18 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
           {/* ===== TENANTS ===== */}
           {activeTab === 'tenants' && (
             <div className="bg-[#131B2C] border border-white/5 rounded-3xl overflow-hidden">
-              <div className="p-6 flex flex-wrap justify-between items-center gap-4 border-b border-white/5">
-                <div className="relative w-80">
+              <div className="p-4 md:p-6 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 border-b border-white/5">
+                <div className="relative w-full sm:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input type="text" placeholder="Buscar clínica..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                     className="w-full bg-[#0B0F19] border border-white/10 text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-slate-500" />
                 </div>
-                <button onClick={openCreateTenant} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all">
+                <button onClick={openCreateTenant} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all">
                   <Plus size={18} /> Nova Clínica
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left min-w-[860px]">
                   <thead>
                     <tr className="bg-white/5 border-b border-white/5 text-slate-400 text-sm">
                       <th className="p-5 font-semibold">Clínica</th>
@@ -449,14 +445,14 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
           {/* ===== PLANS ===== */}
           {activeTab === 'plans' && (
             <div className="space-y-8">
-              <div className="flex justify-end">
-                <button onClick={openCreatePlan} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all">
+              <div className="flex justify-stretch sm:justify-end">
+                <button onClick={openCreatePlan} className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all">
                   <Plus size={18} /> Novo Plano
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5 md:gap-8">
                 {plans.map(plan => (
-                  <div key={plan.id} className={`bg-[#131B2C] border rounded-3xl p-8 relative group transition-all ${plan.isActive ? 'border-white/10 hover:border-blue-500/30' : 'border-white/5 opacity-60'}`}>
+                  <div key={plan.id} className={`bg-[#131B2C] border rounded-3xl p-5 md:p-8 relative group transition-all ${plan.isActive ? 'border-white/10 hover:border-blue-500/30' : 'border-white/5 opacity-60'}`}>
                     <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-3xl"></div>
                     <div className="relative z-10">
                       <div className="flex justify-between items-start mb-6">
@@ -478,7 +474,7 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
                       </div>
                       <p className="text-slate-400 text-sm mb-6 h-10">{plan.description}</p>
                       <div className="mb-8">
-                        <span className="text-4xl font-extrabold text-white">{formatCurrency(plan.priceCents)}</span>
+                        <span className="text-3xl md:text-4xl font-extrabold text-white">{formatCurrency(plan.priceCents)}</span>
                         <span className="text-slate-500 font-medium">/{plan.billingInterval === 'year' ? 'ano' : 'mês'}</span>
                       </div>
                       <ul className="space-y-4 mb-8">

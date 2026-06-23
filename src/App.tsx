@@ -79,6 +79,7 @@ import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_K
 export type ViewType = string;
 
 const todayDate = () => new Date().toISOString().split('T')[0];
+const getInitialView = (): ViewType => new URLSearchParams(window.location.search).get('view') || 'Dashboard';
 
 export default function App() {
   const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('consultio_token'));
@@ -87,7 +88,7 @@ export default function App() {
   const [bootstrapError, setBootstrapError] = useState('');
   const [needsSetup, setNeedsSetup] = useState(false);
   const [showClinicOnboarding, setShowClinicOnboarding] = useState(false);
-  const [activeView, setActiveView] = useState<ViewType>('Dashboard');
+  const [activeView, setActiveView] = useState<ViewType>(getInitialView);
   const [platformReturnToken, setPlatformReturnToken] = useState<string | null>(() => localStorage.getItem('consultio_platform_token'));
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

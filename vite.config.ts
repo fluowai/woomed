@@ -20,9 +20,11 @@ export default defineConfig(() => {
           theme_color: '#0d9488',
           background_color: '#f8fafc',
           display: 'standalone',
+          display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
           orientation: 'portrait',
           scope: '/',
           start_url: '/',
+          categories: ['business', 'medical', 'productivity'],
           icons: [
             {
               src: 'pwa-icon.svg',
@@ -45,6 +47,29 @@ export default defineConfig(() => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
+            }
+          ],
+          shortcuts: [
+            {
+              name: 'Mensagens',
+              short_name: 'Mensagens',
+              description: 'Abrir conversas da clinica',
+              url: '/?view=Mensagens',
+              icons: [{ src: 'pwa-icon-192.png', sizes: '192x192', type: 'image/png' }]
+            },
+            {
+              name: 'Agenda',
+              short_name: 'Agenda',
+              description: 'Abrir agenda da clinica',
+              url: '/?view=Agenda',
+              icons: [{ src: 'pwa-icon-192.png', sizes: '192x192', type: 'image/png' }]
+            },
+            {
+              name: 'Painel SaaS',
+              short_name: 'SaaS',
+              description: 'Abrir painel de plataforma',
+              url: '/?view=Painel%20SaaS',
+              icons: [{ src: 'pwa-icon-192.png', sizes: '192x192', type: 'image/png' }]
             }
           ]
         },
