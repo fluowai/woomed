@@ -204,7 +204,7 @@ export function AgentsHub({
 }: {
   agents: ServiceAgent[];
   templates: AgentTemplate[];
-  onCreateAgent: (agent: Omit<ServiceAgent, 'id' | 'createdAt' | 'status'>) => void;
+  onCreateAgent: (agent: Omit<ServiceAgent, 'id' | 'createdAt' | 'status'>) => Promise<boolean> | boolean;
   onUpdateAgent: (id: string, patch: Partial<ServiceAgent>) => void;
   onCreateFromTemplate: (templateId: string) => void;
 }) {
@@ -216,6 +216,8 @@ export function AgentsHub({
   const [connectionId, setConnectionId] = useState('');
   const [connections, setConnections] = useState<{ id: string; name: string; phoneNumber: string }[]>([]);
   const [rules, setRules] = useState('Nao informar diagnosticos\nEncaminhar urgencias para humano\nValidar identidade antes de dados sensiveis');
+  const [isCreating, setIsCreating] = useState(false);
+  const [formMessage, setFormMessage] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('consultio_token');
@@ -227,9 +229,14 @@ export function AgentsHub({
 
   const activeCount = agents.filter(agent => agent.status === 'active').length;
 
-  const submit = () => {
-    if (!name || !objective) return;
-    onCreateAgent({
+  const submit = async () => {
+    if (!name.trim() || !objective.trim()) {
+      setFormMessage('Preencha nome e objetivo para criar o agente.');
+      return;
+    }
+    setIsCreating(true);
+    setFormMessage('');
+    const ok = await onCreateAgent({
       name,
       channel,
       objective,
@@ -240,9 +247,15 @@ export function AgentsHub({
       knowledgeBase: ['Agenda', 'Pacientes', 'Servicos', 'Precos'],
       connectionId: connectionId || undefined,
     });
-    setName('');
-    setObjective('');
-    setConnectionId('');
+    setIsCreating(false);
+    if (ok) {
+      setName('');
+      setObjective('');
+      setConnectionId('');
+      setFormMessage('Agente criado como rascunho. Ative no card ao lado quando quiser.');
+    } else {
+      setFormMessage('Nao foi possivel criar o agente. Verifique o alerta no topo da tela.');
+    }
   };
 
   return (
@@ -265,6 +278,11 @@ export function AgentsHub({
               { value: '', label: 'Nenhum (seletor automatico)' },
               ...connections.map(c => ({ value: c.id, label: `${c.name} (${c.phoneNumber})` }))
             ]} />
+            {formMessage && (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-700">
+                {formMessage}
+              </div>
+            )}
             <label className="flex flex-col gap-1.5">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Regras</span>
               <textarea
@@ -274,8 +292,8 @@ export function AgentsHub({
                 className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold"
               />
             </label>
-            <button onClick={submit} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs">
-              Criar agente
+            <button disabled={isCreating} onClick={submit} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-2xl py-4 font-black uppercase tracking-widest text-xs">
+              {isCreating ? 'Criando...' : 'Criar agente'}
             </button>
           </div>
         </div>

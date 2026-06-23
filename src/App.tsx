@@ -483,8 +483,11 @@ export default function App() {
     try {
       const response = await apiPost<{ agent: ServiceAgent }>('/api/agents', authToken, agent);
       setServiceAgents(prev => [response.agent, ...prev]);
+      showToast('success', `Agente ${response.agent.name} criado como rascunho.`);
+      return true;
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Erro ao criar agente.');
+      return false;
     }
   };
 
