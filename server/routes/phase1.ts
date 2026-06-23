@@ -93,47 +93,56 @@ async function saveUserPassword(userId: string, passwordHash: string) {
 export function registerPhase1Routes(app: Express) {
   // === AUTH (JWT) ===
   app.post("/api/v2/auth/login", async (req, res) => {
-    const data = await loadData();
-    if (!(await hasConfiguredSuperAdmin())) {
-      return res.status(400).json({ error: "Nenhum super admin configurado. Complete o setup primeiro.", code: "SETUP_REQUIRED" });
+    try {
+      const data = await loadData();
+      if (!(await hasConfiguredSuperAdmin())) {
+        return res.status(400).json({ error: "Nenhum super admin configurado. Complete o setup primeiro.", code: "SETUP_REQUIRED" });
+      }
+
+      const { email, password } = req.body || {};
+      if (!email || !password) return res.status(400).json({ error: "Email e senha obrigatorios.", code: "MISSING_CREDENTIALS" });
+
+      const dbRow = await findUserByEmail(email);
+
+      if (!dbRow) {
+        return res.status(401).json({ error: "Email ou senha invalidos.", code: "USER_NOT_FOUND" });
+      }
+
+      if ((dbRow as any).is_active === false || (dbRow as any).isActive === false) {
+        return res.status(401).json({ error: "Usuario inativo.", code: "USER_INACTIVE" });
+      }
+
+      if (!((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
+        return res.status(401).json({ error: "Senha nao configurada para este usuario.", code: "PASSWORD_HASH_MISSING" });
+      }
+
+      const passwordHash = (dbRow as any).password_hash || (dbRow as any).passwordHash;
+      if (!verifyPassword(password, passwordHash)) {
+        return res.status(401).json({ error: "Email ou senha invalidos.", code: "PASSWORD_MISMATCH" });
+      }
+
+      const appUser = dbUserToApp(dbRow);
+      if (typeof appUser.role === "string" && ["super_admin", "admin", "doctor", "reception", "finance"].includes(appUser.role) === false) {
+        appUser.role = "reception" as any;
+      }
+
+      if ((dbRow as any).mfa_enabled || (dbRow as any).mfaEnabled) {
+        const mfaToken = randomUUID();
+        sessions.set(`mfa:${mfaToken}`, appUser);
+        return res.json({ mfaRequired: true, mfaToken, userId: (dbRow as any).id });
+      }
+
+      const tokens = generateTokens(appUser);
+      await audit(data, appUser, "login", "session", tokens.token, "Login JWT");
+      res.json({ ...tokens, user: appUser });
+    } catch (error) {
+      console.error("[Auth] login failed", error);
+      res.status(500).json({
+        error: "Erro interno no login. Verifique DATABASE_URL e schema do Supabase.",
+        code: "AUTH_INTERNAL_ERROR",
+        detail: error instanceof Error ? error.message : String(error)
+      });
     }
-
-    const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "Email e senha obrigatorios." });
-
-    const dbRow = await findUserByEmail(email);
-
-    if (!dbRow) {
-      return res.status(401).json({ error: "Email ou senha invalidos.", code: "USER_NOT_FOUND" });
-    }
-
-    if ((dbRow as any).is_active === false || (dbRow as any).isActive === false) {
-      return res.status(401).json({ error: "Usuario inativo.", code: "USER_INACTIVE" });
-    }
-
-    if (!((dbRow as any).password_hash || (dbRow as any).passwordHash)) {
-      return res.status(401).json({ error: "Senha nao configurada para este usuario.", code: "PASSWORD_HASH_MISSING" });
-    }
-
-    const passwordHash = (dbRow as any).password_hash || (dbRow as any).passwordHash;
-    if (!verifyPassword(password, passwordHash)) {
-      return res.status(401).json({ error: "Email ou senha invalidos.", code: "PASSWORD_MISMATCH" });
-    }
-
-    const appUser = dbUserToApp(dbRow);
-    if (typeof appUser.role === "string" && ["super_admin", "admin", "doctor", "reception", "finance"].includes(appUser.role) === false) {
-      appUser.role = "reception" as any;
-    }
-
-    if ((dbRow as any).mfa_enabled || (dbRow as any).mfaEnabled) {
-      const mfaToken = randomUUID();
-      sessions.set(`mfa:${mfaToken}`, appUser);
-      return res.json({ mfaRequired: true, mfaToken, userId: (dbRow as any).id });
-    }
-
-    const tokens = generateTokens(appUser);
-    await audit(data, appUser, "login", "session", tokens.token, "Login JWT");
-    res.json({ ...tokens, user: appUser });
   });
 
   app.post("/api/v2/auth/mfa/verify", async (req, res) => {
