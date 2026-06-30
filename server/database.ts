@@ -18,9 +18,13 @@ const CORE_SCHEMA_SQL = `
     owner_email TEXT,
     phone TEXT,
     status TEXT DEFAULT 'active',
+    plan_id TEXT,
     timezone TEXT DEFAULT 'America/Sao_Paulo',
     locale TEXT DEFAULT 'pt-BR',
     settings JSONB DEFAULT '{}',
+    trial_ends_at TIMESTAMPTZ,
+    suspended_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
@@ -44,9 +48,13 @@ const CORE_SCHEMA_SQL = `
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_email TEXT;
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT;
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_id TEXT;
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/Sao_Paulo';
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT 'pt-BR';
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}';
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
+  ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
   ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
@@ -123,6 +131,23 @@ export async function supabaseRestInsert<T>(table: string, row: Record<string, u
   return rows[0] as T;
 }
 
+export async function supabaseRestUpdate<T>(table: string, filter: string, row: Record<string, unknown>): Promise<T | null> {
+  const rows = await supabaseRestRequest<T[]>(`${table}?${filter}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(row)
+  });
+  return rows[0] || null;
+}
+
+export async function supabaseRestDelete(table: string, filter: string): Promise<boolean> {
+  await supabaseRestRequest(`${table}?${filter}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+  return true;
+}
+
 export async function query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> {
   if (!isDatabaseAvailable()) {
     throw new Error("Database not configured. Set DATABASE_URL environment variable.");
@@ -188,11 +213,20 @@ export async function runMigrations(): Promise<void> {
           tenant_id UUID NOT NULL REFERENCES tenants(id),
           name TEXT NOT NULL,
           specialty TEXT NOT NULL,
+          crm TEXT,
+          email TEXT,
+          phone TEXT,
+          user_id UUID REFERENCES users(id),
           available_days TEXT[] DEFAULT '{}',
           working_hours JSONB DEFAULT '{"start": "08:00", "end": "18:00"}',
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        ALTER TABLE doctors ADD COLUMN IF NOT EXISTS crm TEXT;
+        ALTER TABLE doctors ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE doctors ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE doctors ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id);
 
         CREATE TABLE IF NOT EXISTS appointments (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

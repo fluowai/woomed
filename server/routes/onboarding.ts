@@ -121,8 +121,8 @@ export function registerOnboardingRoutes(app: Express) {
     if (isDatabaseAvailable()) {
       try {
         await query(
-          `INSERT INTO tenants (id, slug, legal_name, trade_name, document, owner_email, phone, status, timezone, locale, settings)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'trialing', 'America/Sao_Paulo', 'pt-BR', $8)`,
+          `INSERT INTO tenants (id, slug, legal_name, trade_name, document, owner_email, phone, status, plan_id, timezone, locale, settings, trial_ends_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'trialing', $8, 'America/Sao_Paulo', 'pt-BR', $9, $10)`,
           [
             tenant.id,
             tenant.slug,
@@ -131,7 +131,9 @@ export function registerOnboardingRoutes(app: Express) {
             tenant.document || null,
             tenant.ownerEmail || null,
             tenant.phone || null,
-            JSON.stringify(tenant.settings)
+            tenant.planId || null,
+            JSON.stringify(tenant.settings),
+            tenant.trialEndsAt || null
           ]
         );
         await query(
@@ -154,9 +156,11 @@ export function registerOnboardingRoutes(app: Express) {
           owner_email: tenant.ownerEmail || null,
           phone: tenant.phone || null,
           status: "trialing",
+          plan_id: tenant.planId || null,
           timezone: "America/Sao_Paulo",
           locale: "pt-BR",
-          settings: tenant.settings
+          settings: tenant.settings,
+          trial_ends_at: tenant.trialEndsAt || null
         });
         await supabaseRestInsert("users", {
           id: appUser.id,
@@ -222,7 +226,10 @@ export function registerOnboardingRoutes(app: Express) {
         accountsPayable: [],
         paymentGatewayConfig: [],
         tenants: [],
-        plans: []
+        plans: [],
+        planFeatures: selectedPlan?.features || {},
+        planLimits: selectedPlan?.limits || {},
+        currentPlan: selectedPlan ? { id: selectedPlan.id, code: selectedPlan.code, name: selectedPlan.name } : undefined
       }
     });
   });

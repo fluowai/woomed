@@ -8,6 +8,7 @@ import { createUser, updateUser, deleteUser, listUsers, generateInvite } from ".
 import { registerConsent, getPatientConsents } from "../lgpd";
 import { createBackup, listBackups, restoreBackup, scheduleAutoBackup } from "../backup";
 import { ensureCoreAuthSchema, isDatabaseAvailable, isSupabaseRestAvailable, queryOne, query, supabaseRestFindOne } from "../database";
+import { limitGuard } from "../plan-guard";
 
 interface DbUser {
   id: string;
@@ -227,7 +228,7 @@ export function registerPhase1Routes(app: Express) {
     res.json(users);
   });
 
-  app.post("/api/v2/users", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+  app.post("/api/v2/users", requireAuth, requireRoles("admin"), limitGuard("users"), async (req: AuthedRequest, res) => {
     try {
       const user = await createUser(req.body, req.user!);
       res.json(user);

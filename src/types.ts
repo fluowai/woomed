@@ -26,9 +26,11 @@ export type UserRole = 'super_admin' | 'admin' | 'doctor' | 'reception' | 'finan
 export interface AppUser {
   id: string;
   name: string;
+  email?: string;
   role: UserRole;
   specialty?: string;
   tenantId?: string;
+  isActive?: boolean;
 }
 
 export type PlatformOwnerRole = 'super_admin' | 'ops' | 'support' | 'billing';
@@ -419,6 +421,10 @@ export interface Doctor {
   id: string;
   name: string;
   specialty: string;
+  crm?: string;
+  email?: string;
+  phone?: string;
+  userId?: string;
   availableDays: string[]; // ['Monday', 'Wednesday', ...]
   workingHours: {
     start: string; // '08:00'

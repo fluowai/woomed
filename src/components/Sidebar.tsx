@@ -8,6 +8,7 @@ import {
   DollarSign, 
   FileText, 
   HelpCircle, 
+  KeyRound,
   LayoutDashboard, 
   Link, 
   Megaphone, 
@@ -63,6 +64,8 @@ function allNavItems(): { icon: any, label: string, view: ViewType, superAdminOn
   { icon: Calendar, label: 'Agenda', view: 'Agenda' },
   { icon: ClipboardList, label: 'Prontuários', view: 'Prontuários' },
   { icon: Users, label: 'Pacientes', view: 'Pacientes' },
+  { icon: Stethoscope, label: 'Profissionais', view: 'Profissionais' },
+  { icon: KeyRound, label: 'Acessos', view: 'Acessos' },
   { icon: MonitorPlay, label: 'Consulta Interativa', view: 'Consulta Interativa' },
   { icon: Megaphone, label: 'Marketing', view: 'Marketing' },
   { icon: DollarSign, label: 'Financeiro', view: 'Financeiro' },
@@ -85,9 +88,28 @@ interface SidebarProps {
   userTenantId?: string;
   activeSaasSection?: 'overview' | 'tenants' | 'plans' | 'settings';
   onSaasSectionChange?: (section: 'overview' | 'tenants' | 'plans' | 'settings') => void;
+  planFeatures?: Record<string, boolean | string | number>;
 }
 
-export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId, activeSaasSection = 'overview', onSaasSectionChange }: SidebarProps) {
+const featureByView: Record<string, string> = {
+  Financeiro: 'financeiro',
+  Marketing: 'marketing',
+  TISS: 'tiss',
+  Estoques: 'estoque',
+  'CRM 360': 'crm',
+  'Automação': 'automacao',
+  'NPS & LGPD': 'nps_lgpd',
+  'Central de Agentes': 'ai',
+  'Assistente IA': 'ai',
+  LLMs: 'ai',
+  Neural: 'ai',
+  'Pipeline Agentes': 'ai',
+  'Pipeline SDR': 'ai',
+  'Métricas Agentes': 'ai',
+  'Follow-ups': 'ai',
+};
+
+export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId, activeSaasSection = 'overview', onSaasSectionChange, planFeatures = {} }: SidebarProps) {
   const isPlatformAdmin = userRole === 'super_admin' && !userTenantId;
   const saasSections = [
     { icon: Activity, label: 'Visao Geral', id: 'overview' as const },
@@ -97,7 +119,12 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
   ];
   const navItems = isPlatformAdmin
     ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType, superAdminOnly: true }]
-    : allNavItems().filter(item => !item.superAdminOnly || userRole === 'super_admin');
+    : allNavItems()
+        .filter(item => !item.superAdminOnly || userRole === 'super_admin')
+        .filter(item => {
+          const feature = featureByView[item.view as string];
+          return !feature || planFeatures[feature] !== false;
+        });
   const mobileMainNavItems = isPlatformAdmin
     ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType }]
     : mainNavItems;

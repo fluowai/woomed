@@ -4,6 +4,7 @@ import { z } from "zod";
 import { loadData, saveData } from "../data";
 import { AuthedRequest, requireAuth, requireRoles } from "../middleware";
 import { audit, nowIso } from "../helpers";
+import { featureGuard } from "../plan-guard";
 import {
   NpsSurvey, NpsResponse, NpsMetrics,
   LgpdConsentTemplate, LgpdPatientConsent, LgpdDataSubjectRequest, LgpdSensitiveAccessLog,
@@ -76,6 +77,10 @@ const roomSchema = z.object({
 });
 
 export function registerModules360Routes(app: Express) {
+  app.use("/api/v2/nps", requireAuth, featureGuard("nps_lgpd"));
+  app.use("/api/v2/lgpd", requireAuth, featureGuard("nps_lgpd"));
+  app.use("/api/v2/automation", requireAuth, featureGuard("automacao"));
+
   // ============================================================
   // NPS / SATISFAÇÃO
   // ============================================================

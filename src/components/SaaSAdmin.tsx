@@ -474,6 +474,10 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
                           <UserIcon size={18} className="text-teal-600 shrink-0" />
                           <span>Até {plan.limits.patients} pacientes</span>
                         </li>
+                        <li className="flex items-center gap-3 text-slate-700">
+                          <UserCog size={18} className="text-teal-600 shrink-0" />
+                          <span>Ate {plan.limits.doctors || 0} profissional{plan.limits.doctors !== 1 ? 'ais' : ''}</span>
+                        </li>
                         <li className={`flex items-center gap-3 ${plan.features.whatsapp ? 'text-slate-300' : 'text-slate-600'}`}>
                           <Smartphone size={18} className={plan.features.whatsapp ? 'text-teal-600 shrink-0' : 'text-slate-400 shrink-0'} />
                           <span>WhatsApp {plan.features.whatsapp ? 'Integrado' : 'Indisponível'}</span>
@@ -483,6 +487,13 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
                           <span>Agentes de IA {plan.features.ai ? 'Ativos' : 'Indisponíveis'}</span>
                         </li>
                       </ul>
+                      <div className="mb-6 flex flex-wrap gap-2">
+                        {Object.entries(plan.features).map(([feature, enabled]) => (
+                          <span key={feature} className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg ${enabled ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-400'}`}>
+                            {feature.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
                       <div className="flex gap-2">
                         <span className={`text-xs font-bold px-2 py-1 rounded ${plan.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400'}`}>
                           {plan.isActive ? 'Ativo' : 'Inativo'}

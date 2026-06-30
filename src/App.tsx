@@ -15,6 +15,8 @@ import Login from './components/Login';
 import SetupWizard from './components/SetupWizard';
 import ClinicOnboarding from './components/ClinicOnboarding';
 import SaaSAdmin from './components/SaaSAdmin';
+import Professionals from './components/Professionals';
+import AccessManagement from './components/AccessManagement';
 import { WhatsAppConnections, WhatsAppInbox } from './components/WhatsApp';
 import {
   AgentsHub,
@@ -120,6 +122,8 @@ export default function App() {
   const [paymentGatewayConfig, setPaymentGatewayConfig] = useState<PaymentGatewayConfig[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
+  const [planFeatures, setPlanFeatures] = useState<Record<string, boolean | string | number>>({});
+  const [planLimits, setPlanLimits] = useState<Record<string, number>>({});
   const [crmLeads, setCrmLeads] = useState<CrmLead[]>([]);
   const [crmPipelines, setCrmPipelines] = useState<CrmPipeline[]>([]);
   const [crmOpportunities, setCrmOpportunities] = useState<CrmOpportunity[]>([]);
@@ -183,6 +187,8 @@ export default function App() {
     setPaymentGatewayConfig(state.paymentGatewayConfig || []);
     setTenants(state.tenants || []);
     setPlans(state.plans || []);
+    setPlanFeatures(state.planFeatures || {});
+    setPlanLimits(state.planLimits || {});
     setCrmLeads(state.crmLeads || []);
     setCrmPipelines(state.crmPipelines || []);
     setCrmOpportunities(state.crmOpportunities || []);
@@ -468,6 +474,37 @@ export default function App() {
     }
   };
 
+  const handleCreateDoctor = async (doctor: Omit<Doctor, 'id'>) => {
+    try {
+      const response = await apiPost<{ doctor: Doctor }>('/api/doctors', authToken, doctor);
+      setDoctors(prev => [...prev, response.doctor]);
+      showToast('success', `Profissional ${response.doctor.name} cadastrado.`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao cadastrar profissional.');
+    }
+  };
+
+  const handleUpdateDoctor = async (id: string, doctor: Partial<Doctor>) => {
+    try {
+      const response = await apiPatch<{ doctor: Doctor }>(`/api/doctors/${id}`, authToken, doctor);
+      setDoctors(prev => prev.map(item => item.id === response.doctor.id ? response.doctor : item));
+      showToast('success', `Profissional ${response.doctor.name} atualizado.`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao atualizar profissional.');
+    }
+  };
+
+  const handleDeleteDoctor = async (id: string) => {
+    if (!window.confirm('Remover este profissional?')) return;
+    try {
+      await apiDelete<{ ok: boolean }>(`/api/doctors/${id}`, authToken);
+      setDoctors(prev => prev.filter(item => item.id !== id));
+      showToast('success', 'Profissional removido.');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Erro ao remover profissional.');
+    }
+  };
+
   const handleAddMedicalRecordEntry = async (patientId: string, entry: MedicalRecordEntry) => {
     try {
       const response = await apiPost<{ entry: MedicalRecordEntry; medicalRecord: MedicalRecord; appointments: Appointment[] }>(
@@ -730,6 +767,34 @@ export default function App() {
   }, [selectedDoctor, selectedDate, appointments]);
 
   const renderView = () => {
+    const featureByView: Record<string, string> = {
+      Financeiro: 'financeiro',
+      Marketing: 'marketing',
+      TISS: 'tiss',
+      Estoques: 'estoque',
+      'CRM 360': 'crm',
+      'Automação': 'automacao',
+      'NPS & LGPD': 'nps_lgpd',
+      'Central de Agentes': 'ai',
+      'Assistente IA': 'ai',
+      LLMs: 'ai',
+      Neural: 'ai',
+      'Pipeline Agentes': 'ai',
+      'Pipeline SDR': 'ai',
+      'Métricas Agentes': 'ai',
+      'Follow-ups': 'ai',
+    };
+    const requiredFeature = featureByView[activeView];
+    if (requiredFeature && planFeatures[requiredFeature] === false) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-slate-50 p-6">
+          <div className="text-center p-10 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-lg">
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Modulo indisponivel no plano</h3>
+            <p className="text-slate-500 font-medium">Este recurso pode ser liberado alterando o plano da clinica no Painel SaaS.</p>
+          </div>
+        </div>
+      );
+    }
     switch (activeView) {
       case 'Dashboard':
         return (
@@ -806,6 +871,17 @@ export default function App() {
             onScheduleForPatient={handleScheduleForPatient}
           />
         );
+      case 'Profissionais':
+        return (
+          <Professionals
+            doctors={doctors}
+            onCreateDoctor={handleCreateDoctor}
+            onUpdateDoctor={handleUpdateDoctor}
+            onDeleteDoctor={handleDeleteDoctor}
+          />
+        );
+      case 'Acessos':
+        return <AccessManagement token={authToken} />;
       case 'Prontuários':
         return (
           <MedicalRecords 
@@ -1011,7 +1087,7 @@ export default function App() {
       <Sidebar activeView={activeView} onNewAppointment={() => setIsSchedulingOpen(true)} onViewChange={(view) => {
         setActiveView(view);
         setIsSidebarOpen(false);
-      }} userRole={currentUser?.role} userTenantId={currentUser?.tenantId} activeSaasSection={activeSaasSection} onSaasSectionChange={setActiveSaasSection} />
+      }} userRole={currentUser?.role} userTenantId={currentUser?.tenantId} activeSaasSection={activeSaasSection} onSaasSectionChange={setActiveSaasSection} planFeatures={planFeatures} />
       
       {/* Mobile sidebar overlay */}
       {isSidebarOpen && (

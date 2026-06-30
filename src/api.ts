@@ -78,6 +78,9 @@ export interface BootstrapState {
   professionalRooms?: ProfessionalRoom[];
   patientPortalLogins?: PatientPortalLogin[];
   patientSatisfactionRatings?: PatientSatisfactionRating[];
+  planFeatures?: Record<string, boolean | string | number>;
+  planLimits?: Record<string, number>;
+  currentPlan?: { id: string; code: string; name: string };
 }
 
 async function request<T>(path: string, token: string | null, init: RequestInit = {}): Promise<T> {

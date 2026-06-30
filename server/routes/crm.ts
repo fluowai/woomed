@@ -5,6 +5,7 @@ import { loadData, saveData } from "../data";
 import { AuthedRequest, requireAuth, requireRoles } from "../middleware";
 import { audit, nowIso } from "../helpers";
 import { dataService, TABLES } from "../data-service";
+import { featureGuard } from "../plan-guard";
 import {
   LeadSource, CrmPipeline, CrmLead, CrmOpportunity, CrmInteraction, CrmTask
 } from "../../src/types";
@@ -74,6 +75,8 @@ const interactionSchema = z.object({
 });
 
 export function registerCrmRoutes(app: Express) {
+  app.use("/api/crm", requireAuth, featureGuard("crm"));
+
   // ---- Lead Sources ----
   app.get("/api/crm/lead-sources", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();

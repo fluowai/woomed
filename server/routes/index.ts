@@ -11,6 +11,7 @@ import {
 } from "../../src/types";
 import { dataService, TABLES } from "../data-service";
 import { getAuditEvents } from "../audit";
+import { featureGuard, limitGuard, resolveTenantPlan } from "../plan-guard";
 
 function ensureId() {
   return randomUUID();
@@ -39,7 +40,7 @@ export function registerRoutes(app: Express) {
   });
 
   // PATIENTS
-  app.post("/api/patients", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/patients", requireAuth, requireRoles("admin", "doctor", "reception"), limitGuard("patients"), async (req: AuthedRequest, res) => {
     const parsed = patientSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const p = parsed.data;
@@ -64,6 +65,50 @@ export function registerRoutes(app: Express) {
   app.delete("/api/patients/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const ok = await dataService.deletePatient(req.params.id, req.user!);
     if (!ok) return res.status(404).json({ error: "Paciente nao encontrado." });
+    res.json({ ok: true });
+  });
+
+  // DOCTORS / PROFESSIONALS
+  app.post("/api/doctors", requireAuth, requireRoles("admin"), limitGuard("doctors"), async (req: AuthedRequest, res) => {
+    const { name, specialty, crm, email, phone, userId, availableDays, workingHours } = req.body || {};
+    if (!name || !specialty) return res.status(400).json({ error: "Nome e especialidade sao obrigatorios." });
+    const doctor = {
+      id: ensureId(),
+      name: String(name).trim(),
+      specialty: String(specialty).trim(),
+      crm: crm ? String(crm).trim() : undefined,
+      email: email ? String(email).trim().toLowerCase() : undefined,
+      phone: phone ? String(phone).trim() : undefined,
+      userId: userId || undefined,
+      availableDays: Array.isArray(availableDays) && availableDays.length ? availableDays : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      workingHours: workingHours || { start: "08:00", end: "18:00" }
+    };
+    const created = await dataService.createDoctor(doctor, req.user?.tenantId);
+    const data = await loadData();
+    await audit(data, req.user!, "create", "doctor", created.id, created.name);
+    await saveData(data);
+    res.json({ doctor: created });
+  });
+
+  app.patch("/api/doctors/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const allowed = ["name", "specialty", "crm", "email", "phone", "userId", "availableDays", "workingHours"] as const;
+    const payload = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => (allowed as readonly string[]).includes(key)));
+    const updated = await dataService.updateDoctor(req.params.id, payload as any);
+    if (!updated) return res.status(404).json({ error: "Profissional nao encontrado." });
+    const data = await loadData();
+    await audit(data, req.user!, "update", "doctor", updated.id, updated.name);
+    await saveData(data);
+    res.json({ doctor: updated });
+  });
+
+  app.delete("/api/doctors/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const hasAppointments = data.appointments.some(appointment => appointment.doctorId === req.params.id);
+    if (hasAppointments) return res.status(409).json({ error: "Nao e possivel remover profissional com agendamentos vinculados." });
+    const ok = await dataService.deleteDoctor(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Profissional nao encontrado." });
+    await audit(data, req.user!, "delete", "doctor", req.params.id, "Profissional removido");
+    await saveData(data);
     res.json({ ok: true });
   });
 
@@ -150,7 +195,7 @@ export function registerRoutes(app: Express) {
   });
 
   // FINANCE
-  app.post("/api/finance/transactions", requireAuth, requireRoles("admin", "finance"), async (req: AuthedRequest, res) => {
+  app.post("/api/finance/transactions", requireAuth, requireRoles("admin", "finance"), featureGuard("financeiro"), async (req: AuthedRequest, res) => {
     const parsed = financeTransactionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const { description, value, category, type } = parsed.data;
@@ -169,7 +214,7 @@ export function registerRoutes(app: Express) {
   });
 
   // AGENTS
-  app.post("/api/agents", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/agents", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), async (req: AuthedRequest, res) => {
     const parsed = agentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const fields = parsed.data;
@@ -186,7 +231,7 @@ export function registerRoutes(app: Express) {
     res.json({ agent: created });
   });
 
-  app.patch("/api/agents/:id", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.patch("/api/agents/:id", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), async (req: AuthedRequest, res) => {
     const updated = await dataService.updateOne<ServiceAgent>(TABLES.serviceAgents, req.params.id, req.body as Partial<ServiceAgent>, req.user!, "serviceAgents");
     if (!updated) return res.status(404).json({ error: "Agente nao encontrado." });
     res.json({ agent: updated });
@@ -198,7 +243,7 @@ export function registerRoutes(app: Express) {
     res.json({ ok: true });
   });
 
-  app.post("/api/agent-templates/:id/use", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/agent-templates/:id/use", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), async (req: AuthedRequest, res) => {
     const data = await loadData();
     const template = data.agentTemplates.find(item => item.id === req.params.id);
     if (!template) return res.status(404).json({ error: "Modelo de agente nao encontrado." });
@@ -216,7 +261,7 @@ export function registerRoutes(app: Express) {
   });
 
   // LLM PROVIDERS
-  app.post("/api/llms", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+  app.post("/api/llms", requireAuth, requireRoles("admin"), featureGuard("ai"), async (req: AuthedRequest, res) => {
     const data = await loadData();
     const { name, provider, model, apiKey, endpoint, temperature = 0.35, maxTokens = 1200, isDefault = false } = req.body || {};
     if (!name || !provider || !model) return res.status(400).json({ error: "Nome, provedor e modelo obrigatorios." });
@@ -283,7 +328,7 @@ export function registerRoutes(app: Express) {
   });
 
   // CAMPAIGNS
-  app.post("/api/marketing/campaigns", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/marketing/campaigns", requireAuth, requireRoles("admin", "reception"), featureGuard("marketing"), async (req: AuthedRequest, res) => {
     const parsed = campaignSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const { name, audience, channel, goal, scheduledDate, budget } = parsed.data;
@@ -310,7 +355,7 @@ export function registerRoutes(app: Express) {
   });
 
   // TISS
-  app.post("/api/tiss/guides", requireAuth, requireRoles("admin", "finance", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/tiss/guides", requireAuth, requireRoles("admin", "finance", "reception"), featureGuard("tiss"), async (req: AuthedRequest, res) => {
     const data = await loadData();
     const { patientName, operator, procedure, value = 0 } = req.body || {};
     if (!patientName || !operator || !procedure) return res.status(400).json({ error: "Paciente, operadora e procedimento obrigatorios." });
@@ -323,7 +368,7 @@ export function registerRoutes(app: Express) {
     res.json({ guide: created });
   });
 
-  app.patch("/api/tiss/guides/:id", requireAuth, requireRoles("admin", "finance", "reception"), async (req: AuthedRequest, res) => {
+  app.patch("/api/tiss/guides/:id", requireAuth, requireRoles("admin", "finance", "reception"), featureGuard("tiss"), async (req: AuthedRequest, res) => {
     const updated = await dataService.updateOne<TissGuide>(TABLES.tissGuides, req.params.id, req.body as Partial<TissGuide>, req.user!, "tissGuides");
     if (!updated) return res.status(404).json({ error: "Guia TISS nao encontrada." });
     res.json({ guide: updated });
@@ -336,7 +381,7 @@ export function registerRoutes(app: Express) {
   });
 
   // INVENTORY
-  app.post("/api/inventory/items", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/inventory/items", requireAuth, requireRoles("admin", "reception"), featureGuard("estoque"), async (req: AuthedRequest, res) => {
     const data = await loadData();
     const { name, category, quantity = 0, minQuantity = 0, unit = "unidades", expiresAt = "", supplier = "Nao informado" } = req.body || {};
     if (!name || !category) return res.status(400).json({ error: "Nome e categoria obrigatorios." });
@@ -348,7 +393,7 @@ export function registerRoutes(app: Express) {
     res.json({ item: created });
   });
 
-  app.patch("/api/inventory/items/:id", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.patch("/api/inventory/items/:id", requireAuth, requireRoles("admin", "reception"), featureGuard("estoque"), async (req: AuthedRequest, res) => {
     const updated = await dataService.updateOne<InventoryItem>(TABLES.inventoryItems, req.params.id, req.body as Partial<InventoryItem>, req.user!, "inventoryItems");
     if (!updated) return res.status(404).json({ error: "Item de estoque nao encontrado." });
     res.json({ item: updated });
@@ -506,6 +551,7 @@ export function buildState(data: AppData, user: { id: string; name: string; role
   const role = user.role;
   const tenantId = user.tenantId;
   const isPlatform = role === "super_admin" && !tenantId;
+  const currentPlan = resolveTenantPlan(data, tenantId);
   const financeRoles = ["admin", "finance"];
   const patientScope = isPlatform ? [] : scopedItems(data.patients as any[], tenantId);
   const doctorScope = isPlatform ? [] : scopedItems(data.doctors as any[], tenantId);
@@ -538,6 +584,9 @@ export function buildState(data: AppData, user: { id: string; name: string; role
     paymentGatewayConfig: role === "admin" ? scopedItems(data.paymentGatewayConfig as any[], tenantId) : [],
     tenants: role === "super_admin" ? data.tenants : [],
     plans: role === "super_admin" ? data.plans : [],
+    planFeatures: currentPlan?.features || {},
+    planLimits: currentPlan?.limits || {},
+    currentPlan: currentPlan ? { id: currentPlan.id, code: currentPlan.code, name: currentPlan.name } : undefined,
     crmLeads: isPlatform ? [] : scopedItems((data as any).crmLeads || [], tenantId),
     crmPipelines: isPlatform ? [] : scopedItems((data as any).crmPipelines || [], tenantId, true),
     crmOpportunities: isPlatform ? [] : scopedItems((data as any).crmOpportunities || [], tenantId),

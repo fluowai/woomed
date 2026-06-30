@@ -62,6 +62,10 @@ const TABLES = {
   doctors: cfg("doctors", "tenant_id", [
     { field: "name", column: "name" },
     { field: "specialty", column: "specialty" },
+    { field: "crm", column: "crm" },
+    { field: "email", column: "email" },
+    { field: "phone", column: "phone" },
+    { field: "userId", column: "user_id" },
     { field: "availableDays", column: "available_days", isArray: true },
     { field: "workingHours", column: "working_hours", isJson: true },
   ]),
@@ -292,7 +296,36 @@ export class DataService {
   }
 
   async createDoctor(data: Doctor, tenantId?: string): Promise<Doctor> {
-    return pg.create<Doctor>(TABLES.doctors, data, tenantId);
+    const created = await pg.create<Doctor>(TABLES.doctors, data, tenantId);
+    if (shouldSkipJsonPersist()) return created;
+    const json = await this.json;
+    json.doctors.push(scoped(data, tenantId));
+    await saveData(json);
+    return created;
+  }
+
+  async updateDoctor(id: string, data: Partial<Doctor>): Promise<Doctor | null> {
+    const updated = await pg.update<Doctor>(TABLES.doctors, id, data);
+    if (shouldSkipJsonPersist()) return updated;
+    const json = await this.json;
+    const idx = json.doctors.findIndex(d => d.id === id);
+    if (idx !== -1) {
+      json.doctors[idx] = { ...json.doctors[idx], ...data } as Doctor;
+      await saveData(json);
+    }
+    return updated;
+  }
+
+  async deleteDoctor(id: string): Promise<boolean> {
+    const ok = await pg.remove(TABLES.doctors, id);
+    if (shouldSkipJsonPersist()) return ok;
+    const json = await this.json;
+    const idx = json.doctors.findIndex(d => d.id === id);
+    if (idx !== -1) {
+      json.doctors.splice(idx, 1);
+      await saveData(json);
+    }
+    return ok;
   }
 
   // -- Appointments -------------------------------------------------------
