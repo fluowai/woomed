@@ -1,5 +1,7 @@
 import { Pool, QueryResult } from "pg";
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 import { seedUsers } from "./seed";
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -422,7 +424,11 @@ export async function runMigrations(): Promise<void> {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
-      `}
+      `},
+      { name: "003_complete_360", sql: fs.readFileSync(
+        path.join(__dirname, "migrations", "003_complete_360.sql"),
+        "utf-8"
+      )}
     ];
 
     for (const migration of migrationFiles) {
@@ -436,7 +442,7 @@ export async function runMigrations(): Promise<void> {
 
     console.log("Database migrations completed.");
   } catch (error) {
-    console.error("Migration error:", error);
+    console.error("Migration error:", error instanceof Error ? error.message : error);
     throw error;
   } finally {
     client.release();
@@ -490,7 +496,7 @@ export async function runSeed(): Promise<void> {
           [ownerEmail, ownerHash]
         );
       }
-      console.log(`Platform owner ensured: ${ownerEmail}`);
+      console.log(`Platform owner ensured.`);
     }
     console.log("Database seeded with default users.");
   } catch (error) {

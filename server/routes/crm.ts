@@ -80,7 +80,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Lead Sources ----
   app.get("/api/crm/lead-sources", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const sources = (data as any).leadSources || [];
+    const sources = data.leadSources || [];
     res.json(sources);
   });
 
@@ -96,15 +96,15 @@ export function registerCrmRoutes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).leadSources) (data as any).leadSources = [];
-    (data as any).leadSources.push(source);
+    if (!data.leadSources) data.leadSources = [];
+    data.leadSources.push(source);
     await saveData(data);
     res.json({ source });
   });
 
   app.patch("/api/crm/lead-sources/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const sources = (data as any).leadSources || [];
+    const sources = data.leadSources || [];
     const idx = sources.findIndex((s: any) => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Fonte de lead nao encontrada." });
     sources[idx] = { ...sources[idx], ...req.body, updatedAt: nowIso() };
@@ -114,7 +114,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.delete("/api/crm/lead-sources/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const sources = (data as any).leadSources || [];
+    const sources = data.leadSources || [];
     const idx = sources.findIndex((s: any) => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Fonte de lead nao encontrada." });
     sources.splice(idx, 1);
@@ -125,7 +125,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Pipelines ----
   app.get("/api/crm/pipelines", requireAuth, async (_req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json((data as any).crmPipelines || []);
+    res.json(data.crmPipelines || []);
   });
 
   app.post("/api/crm/pipelines", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
@@ -142,16 +142,16 @@ export function registerCrmRoutes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).crmPipelines) (data as any).crmPipelines = [];
-    if (pipeline.isDefault) (data as any).crmPipelines = (data as any).crmPipelines.map((p: any) => ({ ...p, isDefault: false }));
-    (data as any).crmPipelines.push(pipeline);
+    if (!data.crmPipelines) data.crmPipelines = [];
+    if (pipeline.isDefault) data.crmPipelines = data.crmPipelines.map((p: any) => ({ ...p, isDefault: false }));
+    data.crmPipelines.push(pipeline);
     await saveData(data);
     res.json({ pipeline });
   });
 
   app.patch("/api/crm/pipelines/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const pipelines = (data as any).crmPipelines || [];
+    const pipelines = data.crmPipelines || [];
     const idx = pipelines.findIndex((p: any) => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Pipeline nao encontrado." });
     if (req.body.isDefault) pipelines.forEach((p: any) => p.isDefault = false);
@@ -162,7 +162,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.delete("/api/crm/pipelines/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const pipelines = (data as any).crmPipelines || [];
+    const pipelines = data.crmPipelines || [];
     const idx = pipelines.findIndex((p: any) => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Pipeline nao encontrado." });
     pipelines.splice(idx, 1);
@@ -173,7 +173,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Leads ----
   app.get("/api/crm/leads", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let leads = [...((data as any).crmLeads || [])];
+    let leads = [...(data.crmLeads || [])];
     const { status, source, rating, assignedTo, search } = req.query as Record<string, string>;
     if (status) leads = leads.filter(l => l.status === status);
     if (source) leads = leads.filter(l => l.source === source);
@@ -212,8 +212,8 @@ export function registerCrmRoutes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).crmLeads) (data as any).crmLeads = [];
-    (data as any).crmLeads.push(lead);
+    if (!data.crmLeads) data.crmLeads = [];
+    data.crmLeads.push(lead);
     await audit(data, req.user!, "create", "lead", lead.id, lead.fullName);
     await saveData(data);
     res.json({ lead });
@@ -221,7 +221,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.patch("/api/crm/leads/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const leads = (data as any).crmLeads || [];
+    const leads = data.crmLeads || [];
     const idx = leads.findIndex((l: any) => l.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Lead nao encontrado." });
     const oldStatus = leads[idx].status;
@@ -235,7 +235,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.delete("/api/crm/leads/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const leads = (data as any).crmLeads || [];
+    const leads = data.crmLeads || [];
     const idx = leads.findIndex((l: any) => l.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Lead nao encontrado." });
     const removed = leads.splice(idx, 1)[0];
@@ -246,7 +246,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.post("/api/crm/leads/:id/convert", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const leads = (data as any).crmLeads || [];
+    const leads = data.crmLeads || [];
     const leadIdx = leads.findIndex((l: any) => l.id === req.params.id);
     if (leadIdx === -1) return res.status(404).json({ error: "Lead nao encontrado." });
     const lead = leads[leadIdx];
@@ -266,10 +266,10 @@ export function registerCrmRoutes(app: Express) {
       marketingOptIn: false,
       tags: lead.tags,
     };
-    if (!(data as any).patients) (data as any).patients = [];
-    (data as any).patients.push(patient);
-    if (!(data as any).medicalRecords) (data as any).medicalRecords = {};
-    (data as any).medicalRecords[patient.id] = {
+    if (!data.patients) data.patients = [];
+    data.patients.push(patient);
+    if (!data.medicalRecords) data.medicalRecords = {};
+    data.medicalRecords[patient.id] = {
       patientId: patient.id, bloodType: "Desconhecido", gender: "Nao informado",
       allergies: [], medications: [], chronicDiseases: [], entries: []
     };
@@ -285,7 +285,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Opportunities ----
   app.get("/api/crm/opportunities", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let opps = [...((data as any).crmOpportunities || [])];
+    let opps = [...(data.crmOpportunities || [])];
     const { pipelineId, stage, assignedTo } = req.query as Record<string, string>;
     if (pipelineId) opps = opps.filter(o => o.pipelineId === pipelineId);
     if (stage) opps = opps.filter(o => o.stage === stage);
@@ -315,15 +315,15 @@ export function registerCrmRoutes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).crmOpportunities) (data as any).crmOpportunities = [];
-    (data as any).crmOpportunities.push(opp);
+    if (!data.crmOpportunities) data.crmOpportunities = [];
+    data.crmOpportunities.push(opp);
     await saveData(data);
     res.json({ opportunity: opp });
   });
 
   app.patch("/api/crm/opportunities/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const opps = (data as any).crmOpportunities || [];
+    const opps = data.crmOpportunities || [];
     const idx = opps.findIndex((o: any) => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Oportunidade nao encontrada." });
     opps[idx] = { ...opps[idx], ...req.body, updatedAt: nowIso() };
@@ -333,7 +333,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.patch("/api/crm/opportunities/:id/stage", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const opps = (data as any).crmOpportunities || [];
+    const opps = data.crmOpportunities || [];
     const idx = opps.findIndex((o: any) => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Oportunidade nao encontrada." });
     const { stage } = req.body;
@@ -349,7 +349,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.delete("/api/crm/opportunities/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const opps = (data as any).crmOpportunities || [];
+    const opps = data.crmOpportunities || [];
     const idx = opps.findIndex((o: any) => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Oportunidade nao encontrada." });
     opps.splice(idx, 1);
@@ -360,7 +360,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Interactions ----
   app.get("/api/crm/interactions", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let interactions = [...((data as any).crmInteractions || [])];
+    let interactions = [...(data.crmInteractions || [])];
     const { leadId, patientId } = req.query as Record<string, string>;
     if (leadId) interactions = interactions.filter(i => i.leadId === leadId);
     if (patientId) interactions = interactions.filter(i => i.patientId === patientId);
@@ -385,10 +385,10 @@ export function registerCrmRoutes(app: Express) {
       createdAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).crmInteractions) (data as any).crmInteractions = [];
-    (data as any).crmInteractions.push(interaction);
+    if (!data.crmInteractions) data.crmInteractions = [];
+    data.crmInteractions.push(interaction);
     if (interaction.leadId) {
-      const lead = ((data as any).crmLeads || []).find((l: any) => l.id === interaction.leadId);
+      const lead = (data.crmLeads || []).find((l: any) => l.id === interaction.leadId);
       if (lead) {
         lead.status = lead.status === "new" ? "contacted" : lead.status;
         lead.updatedAt = nowIso();
@@ -401,7 +401,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Tasks ----
   app.get("/api/crm/tasks", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let tasks = [...((data as any).crmTasks || [])];
+    let tasks = [...(data.crmTasks || [])];
     const { leadId, opportunityId, assignedTo, status } = req.query as Record<string, string>;
     if (leadId) tasks = tasks.filter(t => t.leadId === leadId);
     if (opportunityId) tasks = tasks.filter(t => t.opportunityId === opportunityId);
@@ -428,15 +428,15 @@ export function registerCrmRoutes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).crmTasks) (data as any).crmTasks = [];
-    (data as any).crmTasks.push(task);
+    if (!data.crmTasks) data.crmTasks = [];
+    data.crmTasks.push(task);
     await saveData(data);
     res.json({ task });
   });
 
   app.patch("/api/crm/tasks/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const tasks = (data as any).crmTasks || [];
+    const tasks = data.crmTasks || [];
     const idx = tasks.findIndex((t: any) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Tarefa nao encontrada." });
     if (req.body.status === "completed" && !tasks[idx].completedAt) tasks[idx].completedAt = nowIso();
@@ -447,7 +447,7 @@ export function registerCrmRoutes(app: Express) {
 
   app.delete("/api/crm/tasks/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const tasks = (data as any).crmTasks || [];
+    const tasks = data.crmTasks || [];
     const idx = tasks.findIndex((t: any) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Tarefa nao encontrada." });
     tasks.splice(idx, 1);

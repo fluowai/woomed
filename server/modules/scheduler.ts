@@ -77,7 +77,7 @@ async function sendWhatsAppMessage(connectionId: string, to: string, text: strin
       body: JSON.stringify({ connectionId, to, text }),
     });
   } catch (err) {
-    console.error(`[Scheduler] WhatsApp send failed:`, err);
+    console.error(`[Scheduler] WhatsApp send failed:`, err instanceof Error ? err.message : err);
   }
 }
 
@@ -249,7 +249,7 @@ async function tick(): Promise<void> {
     await findAbandonedSessions();
     await checkFollowUps();
   } catch (err) {
-    console.error("[Scheduler] Tick error:", err);
+    console.error("[Scheduler] Tick error:", err instanceof Error ? err.message : err);
   }
 }
 

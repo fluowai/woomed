@@ -36,10 +36,31 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/bootstrap", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json(buildState(data, req.user!));
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10)));
+    const state = buildState(data, req.user!);
+    if (req.query.page || req.query.limit) {
+      const paginate = <T>(items: T[]): T[] => items.slice((page - 1) * limit, page * limit);
+      state.patients = paginate(state.patients);
+      state.appointments = paginate(state.appointments);
+      state.financeTransactions = paginate(state.financeTransactions);
+    }
+    res.json(state);
   });
 
   // PATIENTS
+  app.get("/api/patients", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    let items = data.patients.filter(p => !req.user?.tenantId || (p as any).tenantId === req.user.tenantId);
+    const search = String(req.query.search || "").toLowerCase().trim();
+    if (search) items = items.filter(p => p.fullName.toLowerCase().includes(search) || (p.cpf && p.cpf.includes(search)));
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
+    const total = items.length;
+    const result = items.slice((page - 1) * limit, page * limit);
+    res.json({ patients: result, total, page, limit, totalPages: Math.ceil(total / limit) });
+  });
+
   app.post("/api/patients", requireAuth, requireRoles("admin", "doctor", "reception"), limitGuard("patients"), async (req: AuthedRequest, res) => {
     const parsed = patientSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });

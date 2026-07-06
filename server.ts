@@ -1,38 +1,19 @@
 import express from "express";
 import path from "path";
 import { createServer as createHttpServer } from "http";
-import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { PORT, setWhatsmeowApiUrl } from "./server/config";
 import { isDatabaseAvailable, runMigrations, runSeed } from "./server/database";
 import { registerRoutes } from "./server/routes/index";
-import { registerWhatsAppRoutes } from "./server/routes/whatsapp";
-import { registerPhase1Routes } from "./server/routes/phase1";
-import { registerPhase2Routes } from "./server/routes/phase2";
-import { registerAgentRoutes } from "./server/routes/agents-v2";
-import { registerSaaSRoutes } from "./server/routes/saas";
-import { registerCrmRoutes } from "./server/routes/crm";
-import { registerModules360Routes } from "./server/routes/modules-360";
 import { registerSetupRoutes } from "./server/routes/setup";
 import { registerOnboardingRoutes } from "./server/routes/onboarding";
-import { scheduleAutoBackup } from "./server/backup";
-import { startBridge, stopBridge } from "./server/whatsmeow-bridge-manager";
-import { startScheduler } from "./server/modules/scheduler";
+import { registerPublicRoutes } from "./server/routes/public";
 import type { Express } from "express";
 
-const requestId = () => Math.random().toString(36).slice(2, 10);
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-function errorHandler(err: any, req: express.Request, res: express.Response, _next: express.NextFunction) {
-  console.error(`[${requestId()}] ${err?.message || err}`);
-  res.status(err?.status || 500).json({ error: err?.message || "Erro interno do servidor." });
-}
-
-async function startServer() {
+export function createApp(): Express {
   const app = express();
-  const httpServer = createHttpServer(app);
 
   const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN === "true" ? true : process.env.CORS_ORIGIN.split(",").map(s => s.trim())
@@ -65,20 +46,15 @@ async function startServer() {
   }));
   app.use(express.json({ limit: "10mb" }));
 
-  // Request logger
+  const requestId = () => Math.random().toString(36).slice(2, 10);
   app.use((req, _res, next) => {
-    const rid = requestId();
-    (req as any).requestId = rid;
+    (req as any).requestId = requestId();
     const start = Date.now();
     _res.on("finish", () => {
-      console.log(`[${rid}] ${req.method} ${req.path} ${_res.statusCode} ${Date.now() - start}ms`);
+      console.log(`[${(req as any).requestId}] ${req.method} ${req.path} ${_res.statusCode} ${Date.now() - start}ms`);
     });
     next();
   });
-
-  // Setup routes (unauthenticated, no rate limit)
-  registerSetupRoutes(app);
-  registerOnboardingRoutes(app);
 
   // Rate limiting
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "Muitas tentativas de login. Tente novamente em 15 minutos." }, standardHeaders: true, legacyHeaders: false });
@@ -90,8 +66,45 @@ async function startServer() {
   const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: "Muitas requisicoes. Tente novamente em 1 minuto." }, standardHeaders: true, legacyHeaders: false });
   app.use("/api/", apiLimiter);
 
+  // Unauthenticated routes
+  registerSetupRoutes(app);
+  registerOnboardingRoutes(app);
+
+  // Public routes (no auth, public scheduling + patient portal)
+  registerPublicRoutes(app);
+
+  // Serve uploaded files
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+  return app;
+}
+
+export async function registerAllRoutes(app: Express, httpServer?: import("http").Server) {
+  const { registerWhatsAppRoutes } = await import("./server/routes/whatsapp");
+  const { registerPhase1Routes } = await import("./server/routes/phase1");
+  const { registerPhase2Routes } = await import("./server/routes/phase2");
+  const { registerAgentRoutes } = await import("./server/routes/agents-v2");
+  const { registerSaaSRoutes } = await import("./server/routes/saas");
+  const { registerCrmRoutes } = await import("./server/routes/crm");
+  const { registerModules360Routes } = await import("./server/routes/modules-360");
+
+  registerRoutes(app);
+  if (httpServer) registerWhatsAppRoutes(app, httpServer);
+  registerPhase1Routes(app);
+  registerPhase2Routes(app);
+  registerAgentRoutes(app);
+  registerSaaSRoutes(app);
+  registerCrmRoutes(app);
+  registerModules360Routes(app);
+}
+
+async function startServer() {
+  const app = createApp();
+  const httpServer = createHttpServer(app);
+
   // Database
   if (isDatabaseAvailable()) {
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= 30; attempt += 1) {
       try {
@@ -114,21 +127,18 @@ async function startServer() {
     console.log("No DATABASE_URL configured. Using JSON file storage.");
   }
 
-  // Serve uploaded files
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
-  // Start whatsmeow bridge as managed subprocess
+  // Start whatsmeow bridge
   if (!process.env.WHATSMEOW_API_URL) {
+    const { startBridge, stopBridge } = require("./server/whatsmeow-bridge-manager");
     startBridge()
-      .then(async (bridgeUrl) => {
+      .then(async (bridgeUrl: string) => {
         setWhatsmeowApiUrl(bridgeUrl);
         console.log(`Whatsmeow bridge integrated at ${bridgeUrl}`);
-        // Try to reconnect previously connected WhatsApp sessions
         try {
           const { loadData } = await import("./server/data");
-          const { callWhatsmeowBridge, sanitizeConnection } = await import("./server/whatsapp-utils");
+          const { callWhatsmeowBridge } = await import("./server/whatsapp-utils");
           const data = await loadData();
-          const connectedSessions = data.whatsappConnections.filter(c => c.status === "connected" || c.status === "connecting");
+          const connectedSessions = data.whatsappConnections.filter((c: any) => c.status === "connected" || c.status === "connecting");
           for (const conn of connectedSessions) {
             try {
               const resp = await callWhatsmeowBridge<Record<string, unknown>>(`/connections/${conn.id}/connect`, {
@@ -152,35 +162,31 @@ async function startServer() {
           console.warn("[WhatsApp] Auto-reconnect check failed:", e);
         }
       })
-      .catch((error) => {
+      .catch((error: Error) => {
         console.error("Failed to start embedded whatsmeow bridge:", error);
         console.log("WhatsApp features will be unavailable. Set WHATSMEOW_API_URL to use an external bridge.");
       });
   }
 
-  // Routes
-  registerRoutes(app);
-  registerWhatsAppRoutes(app, httpServer);
-  registerPhase1Routes(app);
-  registerPhase2Routes(app);
-  registerAgentRoutes(app);
-  registerSaaSRoutes(app);
-  registerCrmRoutes(app);
-  registerModules360Routes(app);
+  // All routes
+  await registerAllRoutes(app, httpServer);
 
   // Scheduler routes
   const { registerSchedulerRoutes } = await import("./server/routes/scheduler-routes");
   registerSchedulerRoutes(app);
 
   // Start background scheduler
+  const { startScheduler } = await import("./server/modules/scheduler");
   startScheduler();
 
   // Auto backup
+  const { scheduleAutoBackup } = await import("./server/backup");
   scheduleAutoBackup().catch(console.error);
 
   // Vite / Static
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const viteMod = await import("vite");
+    const vite = await viteMod.createServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
@@ -188,7 +194,10 @@ async function startServer() {
     app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  // Error handler (must be last)
+  function errorHandler(err: any, req: express.Request, res: express.Response, _next: express.NextFunction) {
+    console.error(`[${(req as any).requestId}] ${err?.message || err}`);
+    res.status(err?.status || 500).json({ error: err?.message || "Erro interno do servidor." });
+  }
   app.use(errorHandler);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
@@ -198,5 +207,9 @@ async function startServer() {
 
 startServer();
 
-process.on("SIGINT", () => { stopBridge().finally(() => process.exit(0)); });
-process.on("SIGTERM", () => { stopBridge().finally(() => process.exit(0)); });
+process.on("SIGINT", () => {
+  import("./server/whatsmeow-bridge-manager").then(m => m.stopBridge()).finally(() => process.exit(0));
+});
+process.on("SIGTERM", () => {
+  import("./server/whatsmeow-bridge-manager").then(m => m.stopBridge()).finally(() => process.exit(0));
+});

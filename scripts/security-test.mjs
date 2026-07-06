@@ -38,10 +38,10 @@ async function fetchJson(path, options = {}) {
   return { status: res.status, body, headers: res.headers };
 }
 
-console.log("\n" + "=".format(60));
+console.log("\n" + "=".repeat(60));
 console.log("  🧪 SECURITY PENETRATION TEST");
 console.log(`  Target: ${BASE_URL}`);
-console.log("=".format(60));
+console.log("=".repeat(60));
 
 // ── 1. AUTH BYPASS ────────────────────────────────────────────────────
 console.log("\n🔓 1. AUTH BYPASS TESTS");
@@ -147,10 +147,8 @@ await test("CORS não permite origens arbitrárias (produção)", async () => {
 });
 
 // ── Summary ───────────────────────────────────────────────────────────
-console.log("\n" + "=".format(60));
-console.log(`  RESULTADO: ${passed} ✅ / ${failed} ❌`);
-if (failed === 0) console.log("  🎉 Todos os testes de segurança passaram!");
-else console.log(`  ⚠️  ${failed} teste(s) falharam`);
-console.log("=".format(60) + "\n");
+console.log("\n" + "=".repeat(60));
+
+console.log("=".repeat(60) + "\n");
 
 process.exit(failed > 0 ? 1 : 0);

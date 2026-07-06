@@ -86,7 +86,7 @@ export function registerModules360Routes(app: Express) {
   // ============================================================
   app.get("/api/v2/nps/surveys", requireAuth, async (_req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json((data as any).npsSurveys || []);
+    res.json(data.npsSurveys || []);
   });
 
   app.post("/api/v2/nps/surveys", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
@@ -102,15 +102,15 @@ export function registerModules360Routes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).npsSurveys) (data as any).npsSurveys = [];
-    (data as any).npsSurveys.push(survey);
+    if (!data.npsSurveys) data.npsSurveys = [];
+    data.npsSurveys.push(survey);
     await saveData(data);
     res.json({ survey });
   });
 
   app.patch("/api/v2/nps/surveys/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const surveys = (data as any).npsSurveys || [];
+    const surveys = data.npsSurveys || [];
     const idx = surveys.findIndex((s: any) => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Pesquisa NPS nao encontrada." });
     surveys[idx] = { ...surveys[idx], ...req.body, updatedAt: nowIso() };
@@ -120,7 +120,7 @@ export function registerModules360Routes(app: Express) {
 
   app.delete("/api/v2/nps/surveys/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const surveys = (data as any).npsSurveys || [];
+    const surveys = data.npsSurveys || [];
     const idx = surveys.findIndex((s: any) => s.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Pesquisa NPS nao encontrada." });
     surveys.splice(idx, 1);
@@ -130,7 +130,7 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/nps/responses", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let responses = [...((data as any).npsResponses || [])];
+    let responses = [...(data.npsResponses || [])];
     const { surveyId, patientId, startDate, endDate } = req.query as Record<string, string>;
     if (surveyId) responses = responses.filter(r => r.surveyId === surveyId);
     if (patientId) responses = responses.filter(r => r.patientId === patientId);
@@ -153,15 +153,15 @@ export function registerModules360Routes(app: Express) {
       createdAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).npsResponses) (data as any).npsResponses = [];
-    (data as any).npsResponses.push(response);
+    if (!data.npsResponses) data.npsResponses = [];
+    data.npsResponses.push(response);
     await saveData(data);
     res.json({ response });
   });
 
   app.get("/api/v2/nps/metrics", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const responses = (data as any).npsResponses || [];
+    const responses = data.npsResponses || [];
     const { startDate, endDate } = req.query as Record<string, string>;
     let filtered = [...responses];
     if (startDate) filtered = filtered.filter(r => new Date(r.respondedAt) >= new Date(startDate as string));
@@ -194,14 +194,14 @@ export function registerModules360Routes(app: Express) {
   // ============================================================
   app.get("/api/v2/lgpd/consent-templates", requireAuth, async (_req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json((data as any).lgpdConsentTemplates || []);
+    res.json(data.lgpdConsentTemplates || []);
   });
 
   app.post("/api/v2/lgpd/consent-templates", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const parsed = consentTemplateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const data = await loadData();
-    const templates = (data as any).lgpdConsentTemplates || [];
+    const templates = data.lgpdConsentTemplates || [];
     const currentVersion = templates.filter((t: any) => t.type === parsed.data.type).length + 1;
     const template: LgpdConsentTemplate = {
       id: randomUUID(),
@@ -214,15 +214,15 @@ export function registerModules360Routes(app: Express) {
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
-    if (!(data as any).lgpdConsentTemplates) (data as any).lgpdConsentTemplates = [];
-    (data as any).lgpdConsentTemplates.push(template);
+    if (!data.lgpdConsentTemplates) data.lgpdConsentTemplates = [];
+    data.lgpdConsentTemplates.push(template);
     await saveData(data);
     res.json({ template });
   });
 
   app.patch("/api/v2/lgpd/consent-templates/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const templates = (data as any).lgpdConsentTemplates || [];
+    const templates = data.lgpdConsentTemplates || [];
     const idx = templates.findIndex((t: any) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Template de consentimento nao encontrado." });
     templates[idx] = { ...templates[idx], ...req.body, updatedAt: nowIso() };
@@ -232,14 +232,14 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/lgpd/patient-consents/:patientId", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const consents = ((data as any).lgpdPatientConsents || []).filter((c: any) => c.patientId === req.params.patientId);
+    const consents = (data.lgpdPatientConsents || []).filter((c: any) => c.patientId === req.params.patientId);
     res.json(consents);
   });
 
   app.post("/api/v2/lgpd/patient-consents/:patientId/:templateId/grant", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    if (!(data as any).lgpdPatientConsents) (data as any).lgpdPatientConsents = [];
-    const existing = (data as any).lgpdPatientConsents.findIndex(
+    if (!data.lgpdPatientConsents) data.lgpdPatientConsents = [];
+    const existing = data.lgpdPatientConsents.findIndex(
       (c: any) => c.patientId === req.params.patientId && c.consentTemplateId === req.params.templateId && c.status === "granted"
     );
     if (existing >= 0) return res.status(400).json({ error: "Consentimento ja concedido." });
@@ -251,14 +251,14 @@ export function registerModules360Routes(app: Express) {
       grantedAt: nowIso(),
       createdAt: nowIso()
     };
-    (data as any).lgpdPatientConsents.push(consent);
+    data.lgpdPatientConsents.push(consent);
     await saveData(data);
     res.json({ consent });
   });
 
   app.post("/api/v2/lgpd/patient-consents/:patientId/:templateId/revoke", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const consents = (data as any).lgpdPatientConsents || [];
+    const consents = data.lgpdPatientConsents || [];
     const idx = consents.findIndex((c: any) => c.patientId === req.params.patientId && c.consentTemplateId === req.params.templateId && c.status === "granted");
     if (idx === -1) return res.status(404).json({ error: "Consentimento ativo nao encontrado." });
     consents[idx].status = "revoked";
@@ -281,8 +281,8 @@ export function registerModules360Routes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).lgpdDataSubjectRequests) (data as any).lgpdDataSubjectRequests = [];
-    (data as any).lgpdDataSubjectRequests.push(dsar);
+    if (!data.lgpdDataSubjectRequests) data.lgpdDataSubjectRequests = [];
+    data.lgpdDataSubjectRequests.push(dsar);
     await audit(data, req.user!, "create_dsar", "lgpd", dsar.id, `Tipo: ${dsar.type}`);
     await saveData(data);
     res.json({ dsar });
@@ -290,7 +290,7 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/lgpd/dsar", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let requests = [...((data as any).lgpdDataSubjectRequests || [])];
+    let requests = [...(data.lgpdDataSubjectRequests || [])];
     const { patientId, status } = req.query as Record<string, string>;
     if (patientId) requests = requests.filter(r => r.patientId === patientId);
     if (status) requests = requests.filter(r => r.status === status);
@@ -300,7 +300,7 @@ export function registerModules360Routes(app: Express) {
 
   app.patch("/api/v2/lgpd/dsar/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const requests = (data as any).lgpdDataSubjectRequests || [];
+    const requests = data.lgpdDataSubjectRequests || [];
     const idx = requests.findIndex((r: any) => r.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Solicitacao DSAR nao encontrada." });
     if (req.body.status === "completed") requests[idx].processedAt = nowIso();
@@ -311,7 +311,7 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/lgpd/sensitive-logs", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let logs = [...((data as any).lgpdSensitiveAccessLogs || [])];
+    let logs = [...(data.lgpdSensitiveAccessLogs || [])];
     const { patientId } = req.query as Record<string, string>;
     if (patientId) logs = logs.filter(l => l.patientId === patientId);
     logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -335,8 +335,8 @@ export function registerModules360Routes(app: Express) {
       createdAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).lgpdSensitiveAccessLogs) (data as any).lgpdSensitiveAccessLogs = [];
-    (data as any).lgpdSensitiveAccessLogs.push(log);
+    if (!data.lgpdSensitiveAccessLogs) data.lgpdSensitiveAccessLogs = [];
+    data.lgpdSensitiveAccessLogs.push(log);
     await saveData(data);
     res.json({ log });
   });
@@ -346,7 +346,7 @@ export function registerModules360Routes(app: Express) {
   // ============================================================
   app.get("/api/v2/automation/templates", requireAuth, async (_req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json((data as any).automationTemplates || []);
+    res.json(data.automationTemplates || []);
   });
 
   app.post("/api/v2/automation/templates", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
@@ -365,15 +365,15 @@ export function registerModules360Routes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).automationTemplates) (data as any).automationTemplates = [];
-    (data as any).automationTemplates.push(template);
+    if (!data.automationTemplates) data.automationTemplates = [];
+    data.automationTemplates.push(template);
     await saveData(data);
     res.json({ template });
   });
 
   app.patch("/api/v2/automation/templates/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const templates = (data as any).automationTemplates || [];
+    const templates = data.automationTemplates || [];
     const idx = templates.findIndex((t: any) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Template de automacao nao encontrado." });
     templates[idx] = { ...templates[idx], ...req.body, updatedAt: nowIso() };
@@ -383,7 +383,7 @@ export function registerModules360Routes(app: Express) {
 
   app.delete("/api/v2/automation/templates/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const templates = (data as any).automationTemplates || [];
+    const templates = data.automationTemplates || [];
     const idx = templates.findIndex((t: any) => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Template nao encontrado." });
     templates.splice(idx, 1);
@@ -393,7 +393,7 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/automation/reminders", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let reminders = [...((data as any).automationReminders || [])];
+    let reminders = [...(data.automationReminders || [])];
     const { status, appointmentId, patientId } = req.query as Record<string, string>;
     if (status) reminders = reminders.filter(r => r.status === status);
     if (appointmentId) reminders = reminders.filter(r => r.appointmentId === appointmentId);
@@ -418,15 +418,15 @@ export function registerModules360Routes(app: Express) {
       createdAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).automationReminders) (data as any).automationReminders = [];
-    (data as any).automationReminders.push(reminder);
+    if (!data.automationReminders) data.automationReminders = [];
+    data.automationReminders.push(reminder);
     await saveData(data);
     res.json({ reminder });
   });
 
   app.post("/api/v2/automation/reminders/:id/cancel", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const reminders = (data as any).automationReminders || [];
+    const reminders = data.automationReminders || [];
     const idx = reminders.findIndex((r: any) => r.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Lembrete nao encontrado." });
     reminders[idx].status = "failed";
@@ -442,7 +442,7 @@ export function registerModules360Routes(app: Express) {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: "Email e senha obrigatorios." });
     const data = await loadData();
-    const portalUsers = (data as any).patientPortalLogins || [];
+    const portalUsers = data.patientPortalLogins || [];
     const found = portalUsers.find((u: any) => u.email === email && u.isActive);
     if (!found) return res.status(401).json({ error: "Credenciais invalidas." });
     const bcrypt = await import("bcryptjs");
@@ -451,8 +451,8 @@ export function registerModules360Routes(app: Express) {
     found.lastLoginAt = nowIso();
     await saveData(data);
     const token = randomUUID();
-    if (!(data as any).patientPortalTokens) (data as any).patientPortalTokens = [];
-    (data as any).patientPortalTokens.push({
+    if (!data.patientPortalTokens) data.patientPortalTokens = [];
+    data.patientPortalTokens.push({
       id: randomUUID(), patientId: found.patientId, token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       createdAt: nowIso()
@@ -479,10 +479,10 @@ export function registerModules360Routes(app: Express) {
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
-    if (!(data as any).patientPortalLogins) (data as any).patientPortalLogins = [];
-    const existingIdx = (data as any).patientPortalLogins.findIndex((u: any) => u.email === email);
-    if (existingIdx >= 0) (data as any).patientPortalLogins[existingIdx] = { ...(data as any).patientPortalLogins[existingIdx], ...login, updatedAt: nowIso() };
-    else (data as any).patientPortalLogins.push(login);
+    if (!data.patientPortalLogins) data.patientPortalLogins = [];
+    const existingIdx = data.patientPortalLogins.findIndex((u: any) => u.email === email);
+    if (existingIdx >= 0) data.patientPortalLogins[existingIdx] = { ...data.patientPortalLogins[existingIdx], ...login, updatedAt: nowIso() };
+    else data.patientPortalLogins.push(login);
     await saveData(data);
     res.json({ message: "Acesso criado. Envie a senha temporaria para o paciente.", tempPassword });
   });
@@ -491,7 +491,7 @@ export function registerModules360Routes(app: Express) {
     const token = req.headers["x-portal-token"] as string;
     if (!token) return res.status(401).json({ error: "Token de acesso obrigatorio." });
     const data = await loadData();
-    const portalTokens = (data as any).patientPortalTokens || [];
+    const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });
     const patientAppointments = data.appointments.filter(a => {
@@ -505,7 +505,7 @@ export function registerModules360Routes(app: Express) {
     const token = req.headers["x-portal-token"] as string;
     if (!token) return res.status(401).json({ error: "Token de acesso obrigatorio." });
     const data = await loadData();
-    const portalTokens = (data as any).patientPortalTokens || [];
+    const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });
     const record = data.medicalRecords[found.patientId];
@@ -518,7 +518,7 @@ export function registerModules360Routes(app: Express) {
     const { appointmentId, rating, feedback } = req.body || {};
     if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: "Avaliacao deve ser entre 1 e 5." });
     const data = await loadData();
-    const portalTokens = (data as any).patientPortalTokens || [];
+    const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });
     const satisfaction: PatientSatisfactionRating = {
@@ -528,8 +528,8 @@ export function registerModules360Routes(app: Express) {
       rating, feedback,
       createdAt: nowIso()
     };
-    if (!(data as any).patientSatisfactionRatings) (data as any).patientSatisfactionRatings = [];
-    (data as any).patientSatisfactionRatings.push(satisfaction);
+    if (!data.patientSatisfactionRatings) data.patientSatisfactionRatings = [];
+    data.patientSatisfactionRatings.push(satisfaction);
     await saveData(data);
     res.json({ satisfaction });
   });
@@ -539,7 +539,7 @@ export function registerModules360Routes(app: Express) {
   // ============================================================
   app.get("/api/v2/professional-units", requireAuth, async (_req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json((data as any).professionalUnits || []);
+    res.json(data.professionalUnits || []);
   });
 
   app.post("/api/v2/professional-units", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
@@ -555,15 +555,15 @@ export function registerModules360Routes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).professionalUnits) (data as any).professionalUnits = [];
-    (data as any).professionalUnits.push(unit);
+    if (!data.professionalUnits) data.professionalUnits = [];
+    data.professionalUnits.push(unit);
     await saveData(data);
     res.json({ unit });
   });
 
   app.patch("/api/v2/professional-units/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const units = (data as any).professionalUnits || [];
+    const units = data.professionalUnits || [];
     const idx = units.findIndex((u: any) => u.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Unidade nao encontrada." });
     units[idx] = { ...units[idx], ...req.body, updatedAt: nowIso() };
@@ -573,7 +573,7 @@ export function registerModules360Routes(app: Express) {
 
   app.get("/api/v2/professional-rooms", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let rooms = [...((data as any).professionalRooms || [])];
+    let rooms = [...(data.professionalRooms || [])];
     const { unitId } = req.query as Record<string, string>;
     if (unitId) rooms = rooms.filter(r => r.unitId === unitId);
     res.json(rooms);
@@ -591,15 +591,15 @@ export function registerModules360Routes(app: Express) {
       updatedAt: nowIso()
     };
     const data = await loadData();
-    if (!(data as any).professionalRooms) (data as any).professionalRooms = [];
-    (data as any).professionalRooms.push(room);
+    if (!data.professionalRooms) data.professionalRooms = [];
+    data.professionalRooms.push(room);
     await saveData(data);
     res.json({ room });
   });
 
   app.patch("/api/v2/professional-rooms/:id", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const rooms = (data as any).professionalRooms || [];
+    const rooms = data.professionalRooms || [];
     const idx = rooms.findIndex((r: any) => r.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Sala nao encontrada." });
     rooms[idx] = { ...rooms[idx], ...req.body, updatedAt: nowIso() };

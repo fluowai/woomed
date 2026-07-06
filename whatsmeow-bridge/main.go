@@ -436,6 +436,13 @@ func (b *bridge) messagePayload(s *session, evt *events.Message) map[string]any 
 }
 
 func conversationPayload(s *session, chatJID string, msg map[string]any) map[string]any {
+	profileImageURL, _ := msg["senderProfileImageUrl"].(string)
+	if strings.HasSuffix(chatJID, "@g.us") {
+		if groupPictureURL, _ := msg["groupPictureUrl"].(string); groupPictureURL != "" {
+			profileImageURL = groupPictureURL
+		}
+	}
+
 	return map[string]any{
 		"connectionId":       s.id,
 		"chatJid":            chatJID,
@@ -443,7 +450,7 @@ func conversationPayload(s *session, chatJID string, msg map[string]any) map[str
 		"groupName":          msg["groupName"],
 		"groupPictureUrl":    msg["groupPictureUrl"],
 		"pushName":           msg["pushName"],
-		"profileImageUrl":    msg["senderProfileImageUrl"],
+		"profileImageUrl":    profileImageURL,
 		"participants":       msg["participants"],
 		"lastMessagePreview": msg["body"],
 		"timestamp":          msg["timestamp"],

@@ -36,6 +36,10 @@ export function formatWhatsAppPhone(input = "") {
   return normalized ? `+${normalized}` : "";
 }
 
+export function formatWhatsAppIdentity(input = "") {
+  return normalizeWhatsAppNumber(input);
+}
+
 export function jidToNumber(jid = "") {
   return normalizeWhatsAppNumber(String(jid).split("@")[0]);
 }
@@ -117,11 +121,26 @@ function numberValue(...values: unknown[]) {
   return undefined;
 }
 
+function looksLikeWhatsAppNumber(value = "") {
+  const digits = String(value).replace(/\D/g, "");
+  return digits.length >= 8 && /^[+\d\s().-]+$/.test(value);
+}
+
+function pickPushName(...values: unknown[]) {
+  for (const value of values) {
+    const text = firstText(value);
+    if (!text) continue;
+    if (looksLikeWhatsAppNumber(text)) continue;
+    return text;
+  }
+  return "";
+}
+
 export function normalizeWhatsAppParticipant(raw: Record<string, unknown>, fallbackIndex = 0): WhatsAppParticipant {
   const jid = firstText(raw.jid, raw.id, raw.participant, raw.senderJid);
   const number = jidToNumber(jid) || normalizeWhatsAppNumber(firstText(raw.phone, raw.number));
-  const pushName = firstText(raw.pushName, raw.pushname, raw.name, raw.notify);
-  const name = pushName || (number ? formatWhatsAppPhone(number) : `Participante ${fallbackIndex + 1}`);
+  const pushName = pickPushName(raw.pushName, raw.pushname, raw.notify, raw.name);
+  const name = pushName || (number ? formatWhatsAppIdentity(number) : `Participante ${fallbackIndex + 1}`);
 
   return {
     id: jid || number || `participant-${fallbackIndex}`,
@@ -131,6 +150,40 @@ export function normalizeWhatsAppParticipant(raw: Record<string, unknown>, fallb
     pushName: pushName || undefined,
     profileImageUrl: firstText(raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.photoUrl) || initialsAvatar(name)
   };
+}
+
+function firstNonGroupJid(...values: unknown[]) {
+  for (const value of values) {
+    const text = firstText(value);
+    if (text && !isGroupJid(text)) return text;
+  }
+  return "";
+}
+
+function upsertGroupParticipant(
+  conversation: WhatsAppConversation,
+  participant: WhatsAppParticipant
+) {
+  const idx = conversation.participants.findIndex(item =>
+    item.jid === participant.jid ||
+    Boolean(participant.phone && normalizeWhatsAppNumber(item.phone) === normalizeWhatsAppNumber(participant.phone))
+  );
+
+  if (idx >= 0) {
+    const current = conversation.participants[idx];
+    const hasBetterName = Boolean(participant.pushName || !current.name || current.name === current.phone || current.name === normalizeWhatsAppNumber(current.phone));
+    conversation.participants[idx] = {
+      ...current,
+      name: hasBetterName ? participant.name : current.name,
+      pushName: participant.pushName || current.pushName,
+      phone: participant.phone || current.phone,
+      profileImageUrl: participant.profileImageUrl || current.profileImageUrl
+    };
+  } else {
+    conversation.participants.push(participant);
+  }
+
+  conversation.participantCount = Math.max(conversation.participantCount || 0, conversation.participants.length);
 }
 
 export function findOrCreateConversation(
@@ -143,15 +196,17 @@ export function findOrCreateConversation(
   const conversationJid = chatJid || senderJid;
   const group = isGroupJid(conversationJid);
   const normalizedPhone = group ? "" : jidToNumber(conversationJid);
-  const pushName = firstText(raw.pushName, raw.pushname, raw.notifyName, raw.notify, raw.senderName, raw.name);
+  const pushName = pickPushName(raw.pushName, raw.pushname, raw.notifyName, raw.notify, raw.senderName, raw.name);
   const groupName = firstText(raw.groupName, raw.groupSubject, raw.subject, raw.chatName, raw.name);
-  const directTitle = pushName || (normalizedPhone ? formatWhatsAppPhone(normalizedPhone) : "Contato sem nome");
+  const directTitle = pushName || (normalizedPhone ? formatWhatsAppIdentity(normalizedPhone) : "Contato sem nome");
   const title = group ? groupName || "Grupo sem nome" : directTitle;
   const participantsPayload = Array.isArray(raw.participants) ? raw.participants : [];
   const participants = participantsPayload
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .map((item, index) => normalizeWhatsAppParticipant(item, index));
-  const profileImageUrl = firstText(raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.groupPictureUrl, raw.groupPhotoUrl, raw.photoUrl) || initialsAvatar(title);
+  const profileImageUrl = group
+    ? firstText(raw.groupPictureUrl, raw.groupPhotoUrl, raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.photoUrl) || initialsAvatar(title)
+    : firstText(raw.profileImageUrl, raw.pictureUrl, raw.profilePicUrl, raw.avatarUrl, raw.photoUrl) || initialsAvatar(title);
   const conversationId = firstText(raw.conversationId) || `${connectionId}:${conversationJid || "unknown"}`;
   let conversation = data.whatsappConversations.find(item =>
     item.connectionId === connectionId && (item.jid === conversationJid || item.id === conversationId)
@@ -184,8 +239,9 @@ export function findOrCreateConversation(
     conversation.normalizedPhone = normalizedPhone || conversation.normalizedPhone;
     conversation.profileImageUrl = profileImageUrl || conversation.profileImageUrl;
     conversation.groupName = group ? title : conversation.groupName;
-    conversation.participants = participants.length ? participants : conversation.participants;
-    conversation.participantCount = participants.length || conversation.participantCount;
+    if (participants.length) {
+      for (const participant of participants) upsertGroupParticipant(conversation, participant);
+    }
     conversation.updatedAt = nowIso();
   }
 
@@ -198,18 +254,20 @@ export function buildWhatsAppMessage(
   raw: Record<string, unknown>
 ): WhatsAppMessage {
   const fromMe = Boolean(raw.fromMe || raw.isFromMe);
-  const senderJid = firstText(raw.senderJid, raw.sender, raw.participant, raw.from) || conversation.jid;
+  const senderJid = conversation.kind === "group"
+    ? firstNonGroupJid(raw.senderJid, raw.sender, raw.participant, raw.author, raw.from) || conversation.jid
+    : firstText(raw.senderJid, raw.sender, raw.participant, raw.from) || conversation.jid;
   const senderNumber = jidToNumber(senderJid) || normalizeWhatsAppNumber(firstText(raw.senderPhone, raw.phone, raw.number));
-  const pushName = firstText(raw.pushName, raw.pushname, raw.notifyName, raw.senderName, raw.name);
+  const pushName = pickPushName(raw.pushName, raw.pushname, raw.notifyName, raw.senderName, raw.name);
   const participantName = conversation.participants.find(item => item.jid === senderJid || normalizeWhatsAppNumber(item.phone) === senderNumber)?.name;
   const senderDisplayName = fromMe
     ? connection.name
-    : pushName || participantName || (senderNumber ? formatWhatsAppPhone(senderNumber) : conversation.leadName);
+    : pushName || participantName || (senderNumber ? formatWhatsAppIdentity(senderNumber) : conversation.leadName);
   const body = firstText(raw.body, raw.text, raw.conversation, raw.caption, raw.message);
   const type = inferMessageType(raw);
   const timestamp = firstText(raw.timestamp, raw.createdAt, raw.messageTimestamp) || nowIso();
-  if (conversation.kind === "group" && !fromMe && senderJid && !conversation.participants.some(item => item.jid === senderJid)) {
-    conversation.participants.push({
+  if (conversation.kind === "group" && !fromMe && senderJid && !isGroupJid(senderJid)) {
+    upsertGroupParticipant(conversation, {
       id: senderJid,
       jid: senderJid,
       phone: senderNumber ? formatWhatsAppPhone(senderNumber) : undefined,
@@ -217,7 +275,6 @@ export function buildWhatsAppMessage(
       pushName: pushName || undefined,
       profileImageUrl: firstText(raw.senderProfileImageUrl, raw.senderPictureUrl, raw.senderPhotoUrl) || initialsAvatar(senderDisplayName)
     });
-    conversation.participantCount = Math.max(conversation.participantCount || 0, conversation.participants.length);
   }
 
   return {

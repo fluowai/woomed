@@ -43,7 +43,8 @@ export function minutesToTime(minutes: number) {
 }
 
 export function addMinutes(time: string, amount: number) {
-  return minutesToTime(timeToMinutes(time) + amount);
+  const total = (timeToMinutes(time) + amount) % 1440;
+  return minutesToTime(total < 0 ? total + 1440 : total);
 }
 
 export function addDays(dateStr: string, days: number) {

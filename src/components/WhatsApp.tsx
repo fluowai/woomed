@@ -6,6 +6,7 @@ import {
   FileAudio,
   FileText,
   Image,
+  MessageCircle,
   Pencil,
   Plus,
   Power,
@@ -114,6 +115,16 @@ function formatDateTime(value?: string) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function displayWhatsAppNumber(value?: string) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits || value || '';
+}
+
+function displayWhatsAppIdentity(value?: string) {
+  if (!value) return '';
+  return /^\+?\d[\d\s().-]*$/.test(value) ? displayWhatsAppNumber(value) : value;
 }
 
 function Avatar({ src, label, group = false }: { src?: string; label: string; group?: boolean }) {
@@ -431,6 +442,7 @@ export function WhatsAppConnections({ token }: WhatsAppProps) {
 
 export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
+  const [conversationKind, setConversationKind] = useState<'all' | WhatsAppConversation['kind']>('all');
   const [selectedConversationId, setSelectedConversationId] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
@@ -484,8 +496,9 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
 
   const filteredConversations = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return conversations;
     return conversations.filter((conversation) => {
+      if (conversationKind !== 'all' && conversation.kind !== conversationKind) return false;
+      if (!term) return true;
       const haystack = [
         conversation.leadName,
         conversation.title,
@@ -497,7 +510,10 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
       ].join(' ').toLowerCase();
       return haystack.includes(term);
     });
-  }, [conversations, query]);
+  }, [conversations, conversationKind, query]);
+
+  const directCount = useMemo(() => conversations.filter((conversation) => conversation.kind === 'direct').length, [conversations]);
+  const groupCount = useMemo(() => conversations.filter((conversation) => conversation.kind === 'group').length, [conversations]);
 
   const saveLeadName = async () => {
     if (!selectedConversation || !leadDraft.trim()) return;
@@ -559,6 +575,30 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                 placeholder="Buscar por nome, grupo ou numero"
               />
             </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+              {[
+                { id: 'all' as const, label: 'Todas', count: conversations.length, icon: MessageCircle },
+                { id: 'direct' as const, label: 'Diretas', count: directCount, icon: UserRound },
+                { id: 'group' as const, label: 'Grupos', count: groupCount, icon: Users }
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = conversationKind === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setConversationKind(item.id)}
+                    className={`h-8 rounded-md text-[11px] font-black flex items-center justify-center gap-1.5 ${
+                      active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    {item.label}
+                    <span className={active ? 'text-emerald-600' : 'text-slate-400'}>{item.count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -575,13 +615,15 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                 <Avatar src={conversation.profileImageUrl} label={conversation.leadName} group={conversation.kind === 'group'} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-black text-slate-900 truncate">{conversation.leadName}</span>
+                    <span className="text-sm font-black text-slate-900 truncate">{displayWhatsAppIdentity(conversation.leadName)}</span>
                     <span className="text-[10px] font-bold text-slate-400 shrink-0">{formatDateTime(conversation.updatedAt)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     {conversation.kind === 'group' ? <Users size={12} className="text-blue-500" /> : <UserRound size={12} className="text-emerald-500" />}
                     <span className="text-[11px] font-semibold text-slate-500 truncate">
-                      {conversation.kind === 'group' ? conversation.groupName || conversation.title : conversation.pushName || conversation.phone}
+                      {conversation.kind === 'group'
+                        ? conversation.groupName || conversation.title
+                        : displayWhatsAppIdentity(conversation.pushName || conversation.phone || conversation.normalizedPhone)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-1">
@@ -609,11 +651,11 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar src={selectedConversation.profileImageUrl} label={selectedConversation.leadName} group={selectedConversation.kind === 'group'} />
                   <div className="min-w-0">
-                    <h3 className="font-black text-slate-900 truncate">{selectedConversation.leadName}</h3>
+                    <h3 className="font-black text-slate-900 truncate">{displayWhatsAppIdentity(selectedConversation.leadName)}</h3>
                     <p className="text-xs font-semibold text-slate-500 truncate">
                       {selectedConversation.kind === 'group'
                         ? `${selectedConversation.groupName || selectedConversation.title} - ${selectedConversation.participantCount || selectedConversation.participants.length} participantes`
-                        : `${selectedConversation.pushName || selectedConversation.title} ${selectedConversation.phone || ''}`}
+                        : `${displayWhatsAppIdentity(selectedConversation.pushName || selectedConversation.title)} ${displayWhatsAppNumber(selectedConversation.phone)}`}
                     </p>
                   </div>
                 </div>
@@ -634,7 +676,7 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                   <div key={message.id} className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[82%] md:max-w-[68%] ${message.fromMe ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                       {!message.fromMe && selectedConversation.kind === 'group' && (
-                        <span className="text-[11px] font-black text-blue-700 px-1">{message.senderDisplayName}</span>
+                        <span className="text-[11px] font-black text-blue-700 px-1">{displayWhatsAppIdentity(message.senderDisplayName)}</span>
                       )}
                       <div className={`rounded-lg px-4 py-3 border text-sm leading-relaxed shadow-sm ${
                         message.fromMe
@@ -694,8 +736,8 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                 <div className="flex items-center gap-3 mb-4">
                   <Avatar src={selectedConversation.profileImageUrl} label={selectedConversation.leadName} group={selectedConversation.kind === 'group'} />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lead</p>
-                    <h3 className="font-black text-slate-900 truncate">{selectedConversation.leadName}</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedConversation.kind === 'group' ? 'Grupo' : 'Lead'}</p>
+                    <h3 className="font-black text-slate-900 truncate">{displayWhatsAppIdentity(selectedConversation.leadName)}</h3>
                   </div>
                 </div>
 
@@ -732,7 +774,7 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                 {selectedConversation.phone && (
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Numero</p>
-                    <p className="text-sm font-bold text-slate-800 mt-1">{selectedConversation.phone}</p>
+                    <p className="text-sm font-bold text-slate-800 mt-1">{displayWhatsAppNumber(selectedConversation.phone)}</p>
                   </div>
                 )}
                 {selectedConversation.pushName && (
@@ -751,8 +793,8 @@ export function WhatsAppInbox({ token, onOpenConnections }: WhatsAppProps) {
                       <div key={participant.id} className="flex items-center gap-3">
                         <Avatar src={participant.profileImageUrl} label={participant.name} />
                         <div className="min-w-0">
-                          <p className="text-sm font-black text-slate-800 truncate">{participant.name}</p>
-                          <p className="text-xs font-semibold text-slate-500 truncate">{participant.phone || participant.jid}</p>
+                          <p className="text-sm font-black text-slate-800 truncate">{displayWhatsAppIdentity(participant.name)}</p>
+                          <p className="text-xs font-semibold text-slate-500 truncate">{displayWhatsAppNumber(participant.phone) || displayWhatsAppNumber(participant.jid)}</p>
                         </div>
                       </div>
                     ))}

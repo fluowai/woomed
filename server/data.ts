@@ -7,7 +7,7 @@ import { DEFAULT_AGENT_TEMPLATES, DEFAULT_LLM_PROVIDER_CONFIGS, DEFAULT_NEURAL_K
 import { DEFAULT_SAAS_PLANS, mergeDefaultPlans } from "./saas-defaults";
 
 export interface ServerUser extends AppUser {
-  pin: string;
+  pin?: string;
   email?: string;
   passwordHash?: string;
   mfaSecret?: string;

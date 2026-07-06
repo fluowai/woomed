@@ -41,10 +41,13 @@ function formatDate(date: Date): string {
 export async function createBackup(): Promise<string> {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   const data = await loadData();
+  // Strip volatile runtime state from backups
+  const sanitized = { ...data };
+  delete (sanitized as any).__agentRuntime;
   const encryptionKey = getBackupEncryptionKey();
   const backupName = `consultio-backup-${formatDate(new Date())}.enc`;
   const backupPath = path.join(BACKUP_DIR, backupName);
-  const plaintext = Buffer.from(JSON.stringify(data), "utf-8");
+  const plaintext = Buffer.from(JSON.stringify(sanitized), "utf-8");
   const encrypted = encryptBuffer(plaintext, encryptionKey);
   await fs.writeFile(backupPath, encrypted);
   await cleanOldBackups();
@@ -102,7 +105,7 @@ export async function scheduleAutoBackup(): Promise<void> {
       await createBackup();
       console.log(`[Backup] Auto backup created at ${new Date().toISOString()}`);
     } catch (error) {
-      console.error("[Backup] Auto backup failed:", error);
+      console.error("[Backup] Auto backup failed:", error instanceof Error ? error.message : error);
     }
   };
 

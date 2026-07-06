@@ -58,6 +58,7 @@ const TABLES = {
     { field: "notes", column: "notes" },
     { field: "lgpdConsent", column: "lgpd_consent" },
     { field: "lgpdConsentAt", column: "lgpd_consent_at" },
+    { field: "lgpdConsentVersion", column: "lgpd_consent_version" },
   ]),
   doctors: cfg("doctors", "tenant_id", [
     { field: "name", column: "name" },
@@ -237,7 +238,7 @@ const TABLES = {
 // ---------------------------------------------------------------------------
 
 function shouldSkipJsonPersist(): boolean {
-  return isDatabaseAvailable() && process.env.NODE_ENV === "production";
+  return isDatabaseAvailable();
 }
 
 export class DataService {
@@ -487,6 +488,37 @@ export class DataService {
       }
     }
     return ok;
+  }
+  // -- Full state bootstrap (reads from DB, falls back to JSON) ------------
+
+  async loadFullState(tenantId?: string): Promise<AppData | null> {
+    if (!isDatabaseAvailable()) return null;
+    try {
+      const data: AppData = {} as AppData;
+      data.patients = await this.getPatients(tenantId);
+      data.doctors = await this.getDoctors(tenantId);
+      data.appointments = await this.getAppointments(tenantId);
+      data.financeTransactions = await this.getFinanceTransactions(tenantId);
+      data.medicalRecords = await this.getMedicalRecords(tenantId);
+      data.serviceAgents = await this.findAll<import('../src/types').ServiceAgent>(TABLES.serviceAgents, tenantId);
+      data.marketingCampaigns = await this.findAll<import('../src/types').MarketingCampaign>(TABLES.marketingCampaigns, tenantId);
+      data.tissGuides = await this.findAll<import('../src/types').TissGuide>(TABLES.tissGuides, tenantId);
+      data.inventoryItems = await this.findAll<import('../src/types').InventoryItem>(TABLES.inventoryItems, tenantId);
+      data.referrals = await this.findAll<import('../src/types').ReferralRecord>(TABLES.referrals, tenantId);
+      data.references = await this.findAll<import('../src/types').ReferenceMaterial>(TABLES.referenceMaterials, tenantId);
+      data.helpTickets = await this.findAll<import('../src/types').HelpTicket>(TABLES.helpTickets, tenantId);
+      data.llmProviderConfigs = await this.findAll<import('../src/types').LlmProviderConfig>(TABLES.llmProviderConfigs, tenantId);
+      data.neuralKnowledge = await this.findAll<import('../src/types').NeuralKnowledgeItem>(TABLES.neuralKnowledge, tenantId);
+      data.patientDocuments = await this.findAll<import('../src/types').PatientDocument>(TABLES.patientDocuments, tenantId);
+      data.waitingList = await this.findAll<import('../src/types').WaitingListEntry>(TABLES.waitingList, tenantId);
+      data.scheduleBlocks = await this.findAll<import('../src/types').ScheduleBlock>(TABLES.scheduleBlocks, tenantId);
+      data.medicalTemplates = await this.findAll<import('../src/types').MedicalTemplate>(TABLES.medicalTemplates, tenantId);
+      data.accountsPayable = await this.findAll<import('../src/types').AccountsPayable>(TABLES.accountsPayable, tenantId);
+      data.paymentGatewayConfig = await this.findAll<import('../src/types').PaymentGatewayConfig>(TABLES.paymentGatewayConfig, tenantId);
+      return data;
+    } catch {
+      return null;
+    }
   }
 }
 

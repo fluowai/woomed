@@ -272,6 +272,96 @@ export function registerPhase1Routes(app: Express) {
     res.json(consents);
   });
 
+  app.get("/api/v2/lgpd/consent-version/:patientId", requireAuth, async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const patient = data.patients.find(p => p.id === req.params.patientId);
+    if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
+    const latestTemplate = (data.lgpdConsentTemplates || [])
+      .filter(t => t.isActive)
+      .sort((a, b) => b.version - a.version)[0];
+    const patientVersion = patient.lgpdConsentVersion || 0;
+    const needsRenewal = latestTemplate ? patientVersion < latestTemplate.version : false;
+    res.json({
+      patientVersion,
+      latestVersion: latestTemplate?.version || 0,
+      needsRenewal,
+      latestTemplate: latestTemplate || null,
+      consentedAt: patient.lgpdConsentAt || null
+    });
+  });
+
+  app.post("/api/v2/lgpd/consent-renew/:patientId", requireAuth, async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const idx = data.patients.findIndex(p => p.id === req.params.patientId);
+    if (idx === -1) return res.status(404).json({ error: "Paciente nao encontrado." });
+    const latestTemplate = (data.lgpdConsentTemplates || [])
+      .filter(t => t.isActive)
+      .sort((a, b) => b.version - a.version)[0];
+    data.patients[idx].lgpdConsent = true;
+    data.patients[idx].lgpdConsentAt = new Date().toISOString();
+    data.patients[idx].lgpdConsentVersion = latestTemplate?.version || 1;
+    await audit(data, req.user!, "lgpd_consent_renewed", "lgpd_consent", req.params.patientId, `versao ${data.patients[idx].lgpdConsentVersion}`);
+    await saveData(data);
+    res.json({ ok: true, version: data.patients[idx].lgpdConsentVersion });
+  });
+
+  app.get("/api/v2/lgpd/patients-needing-renewal", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const latestTemplate = (data.lgpdConsentTemplates || [])
+      .filter(t => t.isActive)
+      .sort((a, b) => b.version - a.version)[0];
+    if (!latestTemplate) return res.json({ patients: [], count: 0 });
+    const needingRenewal = data.patients.filter(p => {
+      if (!p.lgpdConsent) return false;
+      return (p.lgpdConsentVersion || 0) < latestTemplate.version;
+    });
+    res.json({
+      patients: needingRenewal.map(p => ({ id: p.id, fullName: p.fullName, currentVersion: p.lgpdConsentVersion || 0, latestVersion: latestTemplate.version })),
+      count: needingRenewal.length
+    });
+  });
+
+  app.post("/api/v2/lgpd/retention/run", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const retentionYears = Math.max(1, parseInt(String(req.body?.years || "5"), 10));
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - retentionYears);
+    const toRemove = data.patients.filter(p => {
+      const lastAppt = data.appointments
+        .filter(a => a.patientName.toUpperCase() === p.fullName.toUpperCase())
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      if (!lastAppt) return false;
+      return lastAppt.date < cutoff.toISOString().split('T')[0];
+    });
+    const removed = [];
+    for (const patient of toRemove) {
+      const patientId = patient.id;
+      data.patients = data.patients.filter(p => p.id !== patientId);
+      delete data.medicalRecords[patientId];
+      const patientNameUpper = patient.fullName.toUpperCase();
+      data.appointments = data.appointments.filter(a => a.patientName.toUpperCase() !== patientNameUpper);
+      data.financeTransactions = data.financeTransactions.filter(t => t.appointmentId !== patientId);
+      removed.push({ id: patientId, fullName: patient.fullName, lastAppointment: data.appointments.filter(a => a.patientName.toUpperCase() === patient.fullName.toUpperCase()).sort((a, b) => b.date.localeCompare(a.date))[0]?.date });
+    }
+    await audit(data, req.user!, "lgpd_retention_run", "retention", "bulk", `${removed.length} pacientes removidos (${retentionYears} anos sem consulta)`);
+    await saveData(data);
+    res.json({ removed: removed.length, retentionYears, patients: removed });
+  });
+
+  app.get("/api/v2/lgpd/retention/estimate", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    const years = Math.max(1, parseInt(String(req.query.years || "5"), 10));
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - years);
+    const candidateCount = data.patients.filter(p => {
+      const lastAppt = data.appointments
+        .filter(a => a.patientName.toUpperCase() === p.fullName.toUpperCase())
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      return lastAppt && lastAppt.date < cutoff.toISOString().split('T')[0];
+    }).length;
+    res.json({ candidateCount, retentionYears: years, totalPatients: data.patients.length });
+  });
+
   // === BACKUP ===
   app.post("/api/v2/backup", requireAuth, requireRoles("admin"), async (_req, res) => {
     try {
