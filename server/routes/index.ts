@@ -186,6 +186,29 @@ export function registerRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // GET appointments com paginacao
+  app.get("/api/appointments", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    let items = data.appointments.filter(a => !req.user?.tenantId || (a as any).tenantId === req.user.tenantId);
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
+    const total = items.length;
+    const result = items.slice((page - 1) * limit, page * limit);
+    res.json({ appointments: result, total, page, limit, totalPages: Math.ceil(total / limit) });
+  });
+
+  // GET appointments por data com paginacao
+  app.get("/api/appointments/date/:date", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    let items = data.appointments.filter(a => (a.date === req.params.date) && (!req.user?.tenantId || (a as any).tenantId === req.user.tenantId));
+    items.sort((a, b) => a.timeStart.localeCompare(b.timeStart));
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
+    const total = items.length;
+    const result = items.slice((page - 1) * limit, page * limit);
+    res.json({ appointments: result, total, page, limit, date: req.params.date });
+  });
+
   // MEDICAL RECORDS
   app.patch("/api/medical-records/:patientId/metadata", requireAuth, requireRoles("admin", "doctor"), async (req: AuthedRequest, res) => {
     const data = await loadData();
@@ -232,6 +255,24 @@ export function registerRoutes(app: Express) {
     const ok = await dataService.deleteFinanceTransaction(req.params.id, req.user!);
     if (!ok) return res.status(404).json({ error: "Transacao nao encontrada." });
     res.json({ ok: true });
+  });
+
+  // GET finance transactions com paginacao
+  app.get("/api/finance/transactions", requireAuth, requireRoles("admin", "finance"), async (req: AuthedRequest, res) => {
+    const data = await loadData();
+    let items = data.financeTransactions.filter(t => !req.user?.tenantId || (t as any).tenantId === req.user.tenantId);
+    const type = String(req.query.type || "").toLowerCase();
+    if (type === "income" || type === "expense") {
+      items = items.filter(t => (t.value > 0 && type === "income") || (t.value < 0 && type === "expense"));
+    }
+    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
+    const total = items.length;
+    const result = items.slice((page - 1) * limit, page * limit);
+    const income = items.filter(t => t.value > 0).reduce((sum, t) => sum + t.value, 0);
+    const expense = Math.abs(items.filter(t => t.value < 0).reduce((sum, t) => sum + t.value, 0));
+    res.json({ transactions: result, total, page, limit, totalPages: Math.ceil(total / limit), summary: { income, expense } });
   });
 
   // AGENTS

@@ -103,11 +103,25 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom', 'lucide-react'],
+            // Vendor chunks - external dependencies
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-ui': ['lucide-react', 'motion', 'zod'],
+            
+            // Feature chunks - lazy loaded on demand, reduces initial bundle
+            'feature-crm': ['./src/components/CrmModule.tsx'],
+            'feature-finance': ['./src/components/Financeiro.tsx'],
+            'feature-medical': ['./src/components/MedicalRecords.tsx'],
+            'feature-agents': ['./src/components/AgentModules.tsx'],
+            'feature-automation': ['./src/components/AutomationModule.tsx'],
+            'feature-chat': ['./src/components/ChatAssistant.tsx'],
+            
+            // Core app components
+            'app-core': ['./src/App.tsx', './src/components/Sidebar.tsx', './src/components/Header.tsx'],
           },
         },
       },
       chunkSizeWarningLimit: 500,
+      sourcemap: process.env.NODE_ENV === 'production' ? false : true,
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
