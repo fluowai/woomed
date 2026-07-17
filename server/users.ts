@@ -158,5 +158,13 @@ export async function generateInvite(email: string, role: string, actor: AppUser
     details: JSON.stringify({ email, role })
   });
   await saveData(data);
+  
+  try {
+    const { sendInviteEmail } = await import("./mailer");
+    await sendInviteEmail(email, role, token);
+  } catch (e) {
+    console.warn("Nodemailer não está configurado, o email foi suprimido no console.", e);
+  }
+  
   return token;
 }

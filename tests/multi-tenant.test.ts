@@ -33,7 +33,7 @@ describe('Multi-tenant Isolation', () => {
     });
 
     it('returns false when resource tenantId is null/undefined', () => {
-      const resource = { name: 'Patient A' };
+      const resource = { name: 'Patient A' } as { tenantId?: string };
       const result = validateTenantResource(resource, 'clinic-a');
       expect(result).toBe(false);
     });

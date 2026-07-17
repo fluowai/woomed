@@ -205,7 +205,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VITEST) {
+  startServer();
+}
 
 process.on("SIGINT", () => {
   import("./server/whatsmeow-bridge-manager").then(m => m.stopBridge()).finally(() => process.exit(0));

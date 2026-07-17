@@ -74,13 +74,18 @@ const interactionSchema = z.object({
   details: z.record(z.string(), z.unknown()).default({})
 });
 
+function scopedCrm<T extends { tenantId?: string }>(items: T[], tenantId?: string): T[] {
+  if (!tenantId) return items;
+  return items.filter(item => !item.tenantId || item.tenantId === tenantId);
+}
+
 export function registerCrmRoutes(app: Express) {
   app.use("/api/crm", requireAuth, featureGuard("crm"));
 
   // ---- Lead Sources ----
   app.get("/api/crm/lead-sources", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    const sources = data.leadSources || [];
+    const sources = scopedCrm(data.leadSources || [], req.user?.tenantId);
     res.json(sources);
   });
 
@@ -97,6 +102,7 @@ export function registerCrmRoutes(app: Express) {
     };
     const data = await loadData();
     if (!data.leadSources) data.leadSources = [];
+    if (req.user?.tenantId) (source as any).tenantId = req.user.tenantId;
     data.leadSources.push(source);
     await saveData(data);
     res.json({ source });
@@ -123,9 +129,10 @@ export function registerCrmRoutes(app: Express) {
   });
 
   // ---- Pipelines ----
-  app.get("/api/crm/pipelines", requireAuth, async (_req: AuthedRequest, res) => {
+  app.get("/api/crm/pipelines", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    res.json(data.crmPipelines || []);
+    const pipelines = scopedCrm(data.crmPipelines || [], req.user?.tenantId);
+    res.json(pipelines);
   });
 
   app.post("/api/crm/pipelines", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
@@ -143,6 +150,7 @@ export function registerCrmRoutes(app: Express) {
     };
     const data = await loadData();
     if (!data.crmPipelines) data.crmPipelines = [];
+    if (req.user?.tenantId) (pipeline as any).tenantId = req.user.tenantId;
     if (pipeline.isDefault) data.crmPipelines = data.crmPipelines.map((p: any) => ({ ...p, isDefault: false }));
     data.crmPipelines.push(pipeline);
     await saveData(data);
@@ -173,7 +181,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Leads ----
   app.get("/api/crm/leads", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let leads = [...(data.crmLeads || [])];
+    let leads = scopedCrm([...(data.crmLeads || [])], req.user?.tenantId);
     const { status, source, rating, assignedTo, search } = req.query as Record<string, string>;
     if (status) leads = leads.filter(l => l.status === status);
     if (source) leads = leads.filter(l => l.source === source);
@@ -213,6 +221,7 @@ export function registerCrmRoutes(app: Express) {
     };
     const data = await loadData();
     if (!data.crmLeads) data.crmLeads = [];
+    if (req.user?.tenantId) (lead as any).tenantId = req.user.tenantId;
     data.crmLeads.push(lead);
     await audit(data, req.user!, "create", "lead", lead.id, lead.fullName);
     await saveData(data);
@@ -285,7 +294,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Opportunities ----
   app.get("/api/crm/opportunities", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let opps = [...(data.crmOpportunities || [])];
+    let opps = scopedCrm([...(data.crmOpportunities || [])], req.user?.tenantId);
     const { pipelineId, stage, assignedTo } = req.query as Record<string, string>;
     if (pipelineId) opps = opps.filter(o => o.pipelineId === pipelineId);
     if (stage) opps = opps.filter(o => o.stage === stage);
@@ -360,7 +369,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Interactions ----
   app.get("/api/crm/interactions", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let interactions = [...(data.crmInteractions || [])];
+    let interactions = scopedCrm([...(data.crmInteractions || [])], req.user?.tenantId);
     const { leadId, patientId } = req.query as Record<string, string>;
     if (leadId) interactions = interactions.filter(i => i.leadId === leadId);
     if (patientId) interactions = interactions.filter(i => i.patientId === patientId);
@@ -401,7 +410,7 @@ export function registerCrmRoutes(app: Express) {
   // ---- Tasks ----
   app.get("/api/crm/tasks", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData();
-    let tasks = [...(data.crmTasks || [])];
+    let tasks = scopedCrm([...(data.crmTasks || [])], req.user?.tenantId);
     const { leadId, opportunityId, assignedTo, status } = req.query as Record<string, string>;
     if (leadId) tasks = tasks.filter(t => t.leadId === leadId);
     if (opportunityId) tasks = tasks.filter(t => t.opportunityId === opportunityId);

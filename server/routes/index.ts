@@ -73,7 +73,11 @@ export function registerRoutes(app: Express) {
       address: p.address, lgpdConsent: true, lgpdConsentAt: nowIso()
     };
     const created = await dataService.createPatient(newPatient, req.user!, req.user?.tenantId);
-    res.json({ patient: created, medicalRecord: { patientId: created.id, bloodType: "Desconhecido", gender: "Nao informado", allergies: [], medications: [], chronicDiseases: [], entries: [] } });
+    const medicalRecord = { patientId: created.id, bloodType: "Desconhecido", gender: "Nao informado", allergies: [] as string[], medications: [] as string[], chronicDiseases: [] as string[], entries: [] as any[] };
+    const data = await loadData();
+    data.medicalRecords[created.id] = medicalRecord as any;
+    await saveData(data);
+    res.json({ patient: created, medicalRecord });
   });
 
   app.put("/api/patients/:id", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {

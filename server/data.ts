@@ -70,8 +70,8 @@ export interface AppData {
   patientSatisfactionRatings: PatientSatisfactionRating[];
 }
 
-export const dataDir = path.join(process.cwd(), "data");
-export const dataFile = path.join(dataDir, "consultio-data.json");
+export const dataDir = process.env.DATA_DIR || path.join(process.cwd(), "data");
+export const dataFile = process.env.DATA_FILE || path.join(dataDir, "consultio-data.json");
 
 let cachedData: AppData | null = null;
 

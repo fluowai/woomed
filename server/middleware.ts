@@ -57,7 +57,11 @@ export function optionalAuth(req: AuthedRequest, _res: Response, next: NextFunct
 
 export function requireRoles(...roles: UserRole[]) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user) {
+      return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
+    }
+    // Permitir se for super_admin (Acesso global/gestor do sistema) ou se a role estiver na lista
+    if (req.user.role !== "super_admin" && !roles.includes(req.user.role)) {
       return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
     }
     next();

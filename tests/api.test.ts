@@ -1,4 +1,6 @@
-import { createApp, describe, it, expect, request } from './setup';
+import { describe, it, expect } from 'vitest';
+import request from 'supertest';
+import { createApp } from '../server';
 import { registerRoutes } from '../server/routes/index';
 
 const app = createApp();
