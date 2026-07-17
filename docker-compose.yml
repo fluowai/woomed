@@ -1,102 +1,90 @@
 version: "3.8"
 
 services:
-  frontend:
-    image: ghcr.io/fluowai/consultio-frontend:latest
+  postgres:
+    image: postgres:16-alpine
     environment:
-      VITE_API_URL: "same-origin"
-      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
-      VITE_SUPABASE_ANON_KEY: "SUA_ANON_KEY"
+      POSTGRES_DB: consultio
+      POSTGRES_USER: consultio
+      POSTGRES_PASSWORD: "consultiopassword"
+    volumes:
+      - data_postgres:/var/lib/postgresql/data
     networks:
-      - woopanel1
-      - consultio_internal
-    deploy:
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=woopanel1"
-        - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
-        - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
-        - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
-        - "traefik.http.routers.woomed_frontend.priority=100"
-        - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
-        - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
+      - woomed-internal
+    restart: always
 
   api:
     image: ghcr.io/fluowai/consultio-api:latest
     environment:
       NODE_ENV: production
-      PORT: 5173
+      PORT: "5173"
+      APP_URL: "https://woomed.consultio.com.br"
       ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
       CORS_ORIGIN: "https://woomed.consultio.com.br"
-      JWT_SECRET: "9a4b8f335b1c97a8e527d4c2b8c5e03a2f72a4e9b7b9f3c88d8b9e6f1a8c7b6d"
-      ENCRYPTION_MASTER_KEY: "4e2f1a3b5c7d8e9f0a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2e4f"
-      SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
-      SUPABASE_ANON_KEY: "SUA_ANON_KEY"
-      SUPABASE_SERVICE_ROLE_KEY: ""
-      DATABASE_URL: "SUA_DATABASE_URL"
-      PGSSLMODE: require
-      
-      # Integração do WhatsApp
+      JWT_SECRET: "bhj47BqUl6kamMPlO1lTR8gEiiKJNgD8m7acHGwJGwXkS1ywp63fq6pLMEWiCQDwmeB44AId/a4mA+HyJn/J6g=="
+      ENCRYPTION_MASTER_KEY: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+      DATABASE_URL: "postgresql://consultio:consultiopassword@postgres:5432/consultio"
       WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
-      WHATSMEOW_API_TOKEN: ""
-      WHATSMEOW_WEBHOOK_SECRET: "SEU_WEBHOOK_SECRET"
-      
-      # Integração de E-mails (NOVO)
-      SMTP_HOST: "smtp.sendgrid.net"
-      SMTP_PORT: "587"
-      SMTP_USER: "apikey"
-      SMTP_PASS: "SUA_SENHA_DO_SMTP"
-      SMTP_FROM: "no-reply@consultio.com.br"
-      SMTP_SECURE: "false"
-
-      GEMINI_API_KEY: ""
-      PLATFORM_OWNER_EMAIL: "admin@consultio.com.br"
+      WHATSMEOW_WEBHOOK_SECRET: "Zq4Tn8KvR2Lp9YxMf7HsDc5BaE1WuGj3NiXr0CeUtQ"
+      PLATFORM_OWNER_EMAIL: "noreplay@wootech.com.br"
+      PLATFORM_OWNER_PASSWORD: "consultiopassword"
     volumes:
-      - consultio_data:/app/data
-      - consultio_uploads:/app/uploads
+      - data_api:/app/data
+      - data_uploads:/app/uploads
     networks:
       - woopanel1
-      - consultio_internal
-    deploy:
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=woopanel1"
-        - "traefik.http.routers.woomed_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
-        - "traefik.http.routers.woomed_api.entrypoints=websecure"
-        - "traefik.http.routers.woomed_api.tls.certresolver=letsencryptresolver"
-        - "traefik.http.routers.woomed_api.priority=200"
-        - "traefik.http.routers.woomed_api.service=woomed_api"
-        - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
+      - woomed-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=woopanel1"
+      - "traefik.http.routers.woomed_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.woomed_api.entrypoints=websecure"
+      - "traefik.http.routers.woomed_api.tls.certresolver=letsencryptresolver"
+      - "traefik.http.routers.woomed_api.priority=200"
+      - "traefik.http.routers.woomed_api.service=woomed_api"
+      - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
+    restart: always
 
-  whatsmeow-bridge:
+  frontend:
+    image: ghcr.io/fluowai/consultio-frontend:latest
+    environment:
+      VITE_API_URL: "same-origin"
+    networks:
+      - woopanel1
+      - woomed-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=woopanel1"
+      - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
+      - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
+      - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
+      - "traefik.http.routers.woomed_frontend.priority=100"
+      - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
+      - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
+    restart: always
+
+  whatsmeow:
     image: ghcr.io/fluowai/consultio-whatsmeow:latest
     environment:
-      PORT: 8080
+      PORT: "8080"
       WHATSMEOW_DATA_DIR: /app/data
-      APP_WEBHOOK_URL: http://api:5173/api/whatsapp/webhook
-      WHATSMEOW_WEBHOOK_SECRET: "SEU_WEBHOOK_SECRET"
-      WHATSMEOW_API_TOKEN: ""
+      APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
+      WHATSMEOW_WEBHOOK_SECRET: "Zq4Tn8KvR2Lp9YxMf7HsDc5BaE1WuGj3NiXr0CeUtQ"
     volumes:
-      - whatsmeow_data:/app/data
+      - data_wpp:/app/data
     networks:
-      - consultio_internal
-    deploy:
-      restart_policy:
-        condition: any
+      - woomed-internal
+    restart: always
 
 volumes:
-  consultio_data:
-  consultio_uploads:
-  whatsmeow_data:
+  data_postgres:
+  data_api:
+  data_uploads:
+  data_wpp:
 
 networks:
   woopanel1:
     external: true
     name: woopanel1
-  consultio_internal:
-    driver: overlay
-    attachable: true
+  woomed-internal:
+    driver: bridge
