@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  whatsmeow-bridge:
+    image: tulir/whatsmeow:latest # ou imagem equivalente que prove a API
+    container_name: consultiomed_whatsapp_bridge
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # Porta que a sua aplicação vai acessar
+    environment:
+      - PORT=8080
+      - LOG_LEVEL=debug
+      - DB_URI=sqlite:whatsapp_store.db
+    volumes:
+      - whatsmeow_data:/app/whatsapp_store.db
+
+  # Se no futuro quiser rodar a API Node e o Frontend pelo Docker, você pode adicionar abaixo:
+  # api:
+  #   build: .
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - whatsmeow-bridge
+
+volumes:
+  whatsmeow_data:

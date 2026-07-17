@@ -250,6 +250,10 @@ export class DataService {
   // -- Patients -----------------------------------------------------------
 
   async getPatients(tenantId?: string): Promise<Patient[]> {
+    if (!isDatabaseAvailable()) {
+      const json = await this.json;
+      return tenantId ? json.patients.filter((p: any) => p.tenantId === tenantId) : json.patients;
+    }
     return pg.findAll<Patient>(TABLES.patients, tenantId);
   }
 
@@ -272,8 +276,9 @@ export class DataService {
       json.patients[idx] = { ...json.patients[idx], ...data } as Patient;
       iOrE(user, json, "update", "patient", id, json.patients[idx].fullName);
       await saveData(json);
+      return json.patients[idx] as Patient;
     }
-    return updated;
+    return null;
   }
 
   async deletePatient(id: string, user: AppUser): Promise<boolean> {
@@ -286,13 +291,18 @@ export class DataService {
       delete json.medicalRecords[removed.id];
       iOrE(user, json, "delete", "patient", removed.id, removed.fullName);
       await saveData(json);
+      return true;
     }
-    return ok;
+    return false;
   }
 
   // -- Doctors ------------------------------------------------------------
 
   async getDoctors(tenantId?: string): Promise<Doctor[]> {
+    if (!isDatabaseAvailable()) {
+      const json = await this.json;
+      return tenantId ? json.doctors.filter((d: any) => d.tenantId === tenantId) : json.doctors;
+    }
     return pg.findAll<Doctor>(TABLES.doctors, tenantId);
   }
 
@@ -313,8 +323,9 @@ export class DataService {
     if (idx !== -1) {
       json.doctors[idx] = { ...json.doctors[idx], ...data } as Doctor;
       await saveData(json);
+      return json.doctors[idx] as Doctor;
     }
-    return updated;
+    return null;
   }
 
   async deleteDoctor(id: string): Promise<boolean> {
@@ -325,13 +336,18 @@ export class DataService {
     if (idx !== -1) {
       json.doctors.splice(idx, 1);
       await saveData(json);
+      return true;
     }
-    return ok;
+    return false;
   }
 
   // -- Appointments -------------------------------------------------------
 
   async getAppointments(tenantId?: string): Promise<Appointment[]> {
+    if (!isDatabaseAvailable()) {
+      const json = await this.json;
+      return tenantId ? json.appointments.filter((a: any) => a.tenantId === tenantId) : json.appointments;
+    }
     return pg.findAll<Appointment>(TABLES.appointments, tenantId);
   }
 
@@ -353,8 +369,9 @@ export class DataService {
     if (idx !== -1) {
       json.appointments[idx] = { ...json.appointments[idx], ...data } as Appointment;
       await saveData(json);
+      return json.appointments[idx] as Appointment;
     }
-    return updated;
+    return null;
   }
 
   async deleteAppointment(id: string, user: AppUser): Promise<boolean> {
@@ -366,13 +383,18 @@ export class DataService {
       const removed = json.appointments.splice(idx, 1)[0];
       iOrE(user, json, "delete", "appointment", removed.id, `${removed.patientName}`);
       await saveData(json);
+      return true;
     }
-    return ok;
+    return false;
   }
 
   // -- Finance ------------------------------------------------------------
 
   async getFinanceTransactions(tenantId?: string): Promise<FinanceTransaction[]> {
+    if (!isDatabaseAvailable()) {
+      const json = await this.json;
+      return tenantId ? json.financeTransactions.filter((t: any) => t.tenantId === tenantId) : json.financeTransactions;
+    }
     return pg.findAll<FinanceTransaction>(TABLES.financeTransactions, tenantId);
   }
 
@@ -395,8 +417,9 @@ export class DataService {
       const removed = json.financeTransactions.splice(idx, 1)[0];
       iOrE(user, json, "delete", "finance_transaction", removed.id, removed.description);
       await saveData(json);
+      return true;
     }
-    return ok;
+    return false;
   }
 
   // -- Medical Records (special – Record type) ----------------------------
@@ -445,7 +468,15 @@ export class DataService {
 
   // -- Generic CRUD for secondary entities --------------------------------
 
-  async findAll<T>(tableConfig: pg.PgTableConfig, tenantId?: string): Promise<T[]> {
+  async findAll<T>(tableConfig: pg.PgTableConfig, tenantId?: string, entityName?: string): Promise<T[]> {
+    if (!isDatabaseAvailable() && entityName) {
+      const json = await this.json;
+      const collection = (json as any)[entityName as keyof AppData];
+      if (Array.isArray(collection)) {
+        return tenantId ? collection.filter((i: any) => i.tenantId === tenantId) : collection;
+      }
+      return [];
+    }
     return pg.findAll<T>(tableConfig, tenantId);
   }
 
@@ -470,9 +501,10 @@ export class DataService {
       if (idx !== -1) {
         collection[idx] = { ...collection[idx], ...data };
         await saveData(json);
+        return collection[idx];
       }
     }
-    return updated;
+    return null;
   }
 
   async deleteOne(tableConfig: pg.PgTableConfig, id: string, user: AppUser, entityName: string): Promise<boolean> {
@@ -483,11 +515,12 @@ export class DataService {
     if (Array.isArray(collection)) {
       const idx = collection.findIndex((i: any) => i.id === id);
       if (idx !== -1) {
-        const removed = collection.splice(idx, 1)[0];
+        collection.splice(idx, 1);
         await saveData(json);
+        return true;
       }
     }
-    return ok;
+    return false;
   }
   // -- Full state bootstrap (reads from DB, falls back to JSON) ------------
 

@@ -32,7 +32,7 @@ export function registerCrudRoutes(app: Express, prefix: string, opts: CrudOptio
 
   app.get(`${prefix}`, authMiddleware, guardRoles, async (req: AuthedRequest, res) => {
     try {
-      const items = await dataService.findAll(tableConfig, req.user?.tenantId);
+      const items = await dataService.findAll(tableConfig, req.user?.tenantId, entityName);
       res.json({ [entityName]: items });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

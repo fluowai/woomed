@@ -1,141 +1,102 @@
+version: "3.8"
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: consultio-postgres
-    restart: unless-stopped
+  frontend:
+    image: ghcr.io/fluowai/consultio-frontend:latest
     environment:
-      POSTGRES_DB: consultio
-      POSTGRES_USER: consultio
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD obrigatorio}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      VITE_API_URL: "same-origin"
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "SUA_ANON_KEY"
     networks:
-      - consultio-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U consultio -d consultio"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
+        - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
+        - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.woomed_frontend.priority=100"
+        - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
+        - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
 
-  whatsmeow-bridge:
-    build:
-      context: ./whatsmeow-bridge
-      dockerfile: Dockerfile
-    container_name: consultio-whatsmeow
-    restart: unless-stopped
-    environment:
-      PORT: 8080
-      WHATSMEOW_DATA_DIR: /app/data
-      APP_WEBHOOK_URL: http://consultio-med:5173/api/whatsapp/webhook
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-    volumes:
-      - whatsmeow_data:/app/data
-    networks:
-      - consultio-net
-    depends_on:
-      consultio-med:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  consultio-med:
-    build: .
-    container_name: consultio-med
-    restart: unless-stopped
+  api:
+    image: ghcr.io/fluowai/consultio-api:latest
     environment:
       NODE_ENV: production
       PORT: 5173
-      APP_URL: ${APP_URL:-http://localhost:5173}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://consultio:${DB_PASSWORD}@postgres:5432/consultio}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET obrigatorio}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      WHATSMEOW_API_URL: http://whatsmeow-bridge:8080
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET}
-      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-owner@consultio.local}
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
-      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
-      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-true}
+      ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
+      CORS_ORIGIN: "https://woomed.consultio.com.br"
+      JWT_SECRET: "9a4b8f335b1c97a8e527d4c2b8c5e03a2f72a4e9b7b9f3c88d8b9e6f1a8c7b6d"
+      ENCRYPTION_MASTER_KEY: "4e2f1a3b5c7d8e9f0a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2e4f"
+      SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      SUPABASE_ANON_KEY: "SUA_ANON_KEY"
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      DATABASE_URL: "SUA_DATABASE_URL"
+      PGSSLMODE: require
+      
+      # Integração do WhatsApp
+      WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
+      WHATSMEOW_API_TOKEN: ""
+      WHATSMEOW_WEBHOOK_SECRET: "SEU_WEBHOOK_SECRET"
+      
+      # Integração de E-mails (NOVO)
+      SMTP_HOST: "smtp.sendgrid.net"
+      SMTP_PORT: "587"
+      SMTP_USER: "apikey"
+      SMTP_PASS: "SUA_SENHA_DO_SMTP"
+      SMTP_FROM: "no-reply@consultio.com.br"
+      SMTP_SECURE: "false"
+
+      GEMINI_API_KEY: ""
+      PLATFORM_OWNER_EMAIL: "admin@consultio.com.br"
     volumes:
-      - consultio_med_data:/app/data
+      - consultio_data:/app/data
       - consultio_uploads:/app/uploads
     networks:
-      - consultio-net
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - woopanel1
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.woomed_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.woomed_api.entrypoints=websecure"
+        - "traefik.http.routers.woomed_api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.woomed_api.priority=200"
+        - "traefik.http.routers.woomed_api.service=woomed_api"
+        - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: consultio-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
+  whatsmeow-bridge:
+    image: ghcr.io/fluowai/consultio-whatsmeow:latest
     environment:
-      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:5173}
-      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+      PORT: 8080
+      WHATSMEOW_DATA_DIR: /app/data
+      APP_WEBHOOK_URL: http://api:5173/api/whatsapp/webhook
+      WHATSMEOW_WEBHOOK_SECRET: "SEU_WEBHOOK_SECRET"
+      WHATSMEOW_API_TOKEN: ""
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - whatsmeow_data:/app/data
     networks:
-      - consultio-net
-    depends_on:
-      consultio-med:
-        condition: service_healthy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  consultio-net:
-    driver: bridge
-    name: consultio-network
+      - consultio_internal
+    deploy:
+      restart_policy:
+        condition: any
 
 volumes:
-  postgres_data:
-    name: consultio_postgres_data
-  consultio_med_data:
-    name: consultio_med_data
+  consultio_data:
   consultio_uploads:
-    name: consultio_uploads
   whatsmeow_data:
-    name: consultio_whatsmeow_data
-  caddy_data:
-    name: consultio_caddy_data
-  caddy_config:
-    name: consultio_caddy_config
+
+networks:
+  woopanel1:
+    external: true
+    name: woopanel1
+  consultio_internal:
+    driver: overlay
+    attachable: true

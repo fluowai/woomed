@@ -428,6 +428,10 @@ export async function runMigrations(): Promise<void> {
       { name: "003_complete_360", sql: fs.readFileSync(
         path.join(__dirname, "migrations", "003_complete_360.sql"),
         "utf-8"
+      )},
+      { name: "004_rls_policies", sql: fs.readFileSync(
+        path.join(__dirname, "migrations", "004_rls_policies.sql"),
+        "utf-8"
       )}
     ];
 
