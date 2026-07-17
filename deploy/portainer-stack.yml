@@ -1,20 +1,6 @@
 version: "3.8"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: consultio
-      POSTGRES_USER: consultio
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD obrigatorio}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - woomed-internal
-    deploy:
-      restart_policy:
-        condition: any
-
   api:
     image: ghcr.io/fluowai/consultio-api:latest
     environment:
@@ -23,15 +9,20 @@ services:
       APP_URL: "https://woomed.consultio.com.br"
       ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
       CORS_ORIGIN: "https://woomed.consultio.com.br"
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET obrigatorio}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}
-      DATABASE_URL: "postgresql://consultio:${DB_PASSWORD:?DB_PASSWORD obrigatorio}@postgres:5432/consultio"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET obrigatorio}"
+      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}"
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL obrigatorio (use a string do Supabase)}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-}"
+      VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY:-}"
       WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-noreplay@wootech.com.br}
-      PLATFORM_OWNER_PASSWORD: ${PLATFORM_OWNER_PASSWORD:-}
+      WHATSMEOW_API_TOKEN: "${WHATSMEOW_API_TOKEN:-}"
+      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      PLATFORM_OWNER_EMAIL: "${PLATFORM_OWNER_EMAIL:-noreplay@wootech.com.br}"
+      PLATFORM_OWNER_PASSWORD: "${PLATFORM_OWNER_PASSWORD:-}"
     volumes:
       - consultio_data:/app/data
       - consultio_uploads:/app/uploads
@@ -77,8 +68,8 @@ services:
       PORT: "8080"
       WHATSMEOW_DATA_DIR: /app/data
       APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
-      WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
-      WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
+      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}"
+      WHATSMEOW_API_TOKEN: "${WHATSMEOW_API_TOKEN:-}"
     volumes:
       - whatsmeow_data:/app/data
     networks:
@@ -88,7 +79,6 @@ services:
         condition: any
 
 volumes:
-  postgres_data:
   consultio_data:
   consultio_uploads:
   whatsmeow_data:
