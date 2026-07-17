@@ -10,57 +10,34 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - consultio_internal
+      - woomed-internal
     deploy:
       restart_policy:
         condition: any
-
-  frontend:
-    image: ghcr.io/fluowai/consultio-frontend:latest
-    environment:
-      VITE_API_URL: "same-origin"
-    networks:
-      - woopanel1
-      - consultio_internal
-    deploy:
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=woopanel1"
-        - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
-        - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
-        - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
-        - "traefik.http.routers.woomed_frontend.priority=100"
-        - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
-        - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
 
   api:
     image: ghcr.io/fluowai/consultio-api:latest
     environment:
       NODE_ENV: production
-      PORT: 5173
+      PORT: "5173"
       APP_URL: "https://woomed.consultio.com.br"
       ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
       CORS_ORIGIN: "https://woomed.consultio.com.br"
-
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET obrigatorio}
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}
       DATABASE_URL: "postgresql://consultio:${DB_PASSWORD:?DB_PASSWORD obrigatorio}@postgres:5432/consultio"
-
       WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
       WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
       WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
-
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-fluowai@gmail.com}
+      PLATFORM_OWNER_EMAIL: ${PLATFORM_OWNER_EMAIL:-noreplay@wootech.com.br}
       PLATFORM_OWNER_PASSWORD: ${PLATFORM_OWNER_PASSWORD:-}
     volumes:
       - consultio_data:/app/data
       - consultio_uploads:/app/uploads
     networks:
-      - woopanel1
-      - consultio_internal
+      - woomed-external
+      - woomed-internal
     deploy:
       restart_policy:
         condition: any
@@ -74,18 +51,38 @@ services:
         - "traefik.http.routers.woomed_api.service=woomed_api"
         - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
 
+  frontend:
+    image: ghcr.io/fluowai/consultio-frontend:latest
+    environment:
+      VITE_API_URL: "same-origin"
+    networks:
+      - woomed-external
+      - woomed-internal
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woopanel1"
+        - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
+        - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
+        - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.woomed_frontend.priority=100"
+        - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
+        - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
+
   whatsmeow-bridge:
     image: ghcr.io/fluowai/consultio-whatsmeow:latest
     environment:
-      PORT: 8080
+      PORT: "8080"
       WHATSMEOW_DATA_DIR: /app/data
-      APP_WEBHOOK_URL: http://api:5173/api/whatsapp/webhook
+      APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
       WHATSMEOW_WEBHOOK_SECRET: ${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}
       WHATSMEOW_API_TOKEN: ${WHATSMEOW_API_TOKEN:-}
     volumes:
       - whatsmeow_data:/app/data
     networks:
-      - consultio_internal
+      - woomed-internal
     deploy:
       restart_policy:
         condition: any
@@ -97,9 +94,9 @@ volumes:
   whatsmeow_data:
 
 networks:
-  woopanel1:
+  woomed-external:
     external: true
     name: woopanel1
-  consultio_internal:
+  woomed-internal:
     driver: overlay
     attachable: true
