@@ -9,9 +9,9 @@ services:
       APP_URL: "https://woomed.consultio.com.br"
       ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
       CORS_ORIGIN: "https://woomed.consultio.com.br"
-      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET obrigatorio}"
-      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY:?ENCRYPTION_MASTER_KEY obrigatorio}"
-      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL obrigatorio (use a string do Supabase)}"
+      JWT_SECRET: "${JWT_SECRET}"
+      ENCRYPTION_MASTER_KEY: "${ENCRYPTION_MASTER_KEY}"
+      DATABASE_URL: "${DATABASE_URL}"
       SUPABASE_URL: "${SUPABASE_URL:-}"
       SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
@@ -19,7 +19,7 @@ services:
       VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY:-}"
       WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
       WHATSMEOW_API_TOKEN: "${WHATSMEOW_API_TOKEN:-}"
-      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}"
+      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
       PLATFORM_OWNER_EMAIL: "${PLATFORM_OWNER_EMAIL:-noreplay@wootech.com.br}"
       PLATFORM_OWNER_PASSWORD: "${PLATFORM_OWNER_PASSWORD:-}"
@@ -68,7 +68,7 @@ services:
       PORT: "8080"
       WHATSMEOW_DATA_DIR: /app/data
       APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
-      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET:?WHATSMEOW_WEBHOOK_SECRET obrigatorio}"
+      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET}"
       WHATSMEOW_API_TOKEN: "${WHATSMEOW_API_TOKEN:-}"
     volumes:
       - whatsmeow_data:/app/data
