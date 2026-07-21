@@ -426,15 +426,15 @@ export async function runMigrations(): Promise<void> {
         );
       `},
       { name: "003_complete_360", sql: fs.readFileSync(
-        path.join(__dirname, "migrations", "003_complete_360.sql"),
+        path.join(process.cwd(), "server", "migrations", "003_complete_360.sql"),
         "utf-8"
       )},
       { name: "004_rls_policies", sql: fs.readFileSync(
-        path.join(__dirname, "migrations", "0004_rls_policies.sql"),
+        path.join(process.cwd(), "server", "migrations", "0004_rls_policies.sql"),
         "utf-8"
       )},
       { name: "005_tiss_expansion", sql: fs.readFileSync(
-        path.join(__dirname, "migrations", "005_tiss_expansion.sql"),
+        path.join(process.cwd(), "server", "migrations", "005_tiss_expansion.sql"),
         "utf-8"
       )}
     ];
