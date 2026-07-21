@@ -5,7 +5,35 @@ import { verifyToken } from "./auth";
 
 export type AuthedRequest = Request & { user?: AppUser };
 
-export const sessions = new Map<string, AppUser>();
+interface SessionEntry {
+  user: AppUser;
+  expiresAt: number;
+}
+
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const sessions = new Map<string, SessionEntry>();
+let lastCleanup = Date.now();
+const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+
+function cleanupExpiredSessions() {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
+  lastCleanup = now;
+  for (const [token, entry] of sessions) {
+    if (entry.expiresAt <= now) {
+      sessions.delete(token);
+    }
+  }
+}
+
+export function setSession(token: string, user: AppUser) {
+  cleanupExpiredSessions();
+  sessions.set(token, { user, expiresAt: Date.now() + SESSION_TTL_MS });
+}
+
+export function deleteSession(token: string) {
+  sessions.delete(token);
+}
 
 export function publicUser(user: AppUser & { pin?: string }): AppUser {
   const { id, name, role, specialty, tenantId } = user;
@@ -27,8 +55,14 @@ export function getToken(req: Request): string {
 
 export function resolveUser(token: string): AppUser | null {
   if (!token) return null;
-  const sessionUser = sessions.get(token);
-  if (sessionUser) return sessionUser;
+  const entry = sessions.get(token);
+  if (entry) {
+    if (entry.expiresAt <= Date.now()) {
+      sessions.delete(token);
+      return null;
+    }
+    return entry.user;
+  }
   const jwtUser = verifyToken(token);
   if (jwtUser) {
     const { id, name, role, specialty, tenantId } = jwtUser;
@@ -60,7 +94,6 @@ export function requireRoles(...roles: UserRole[]) {
     if (!req.user) {
       return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
     }
-    // Permitir se for super_admin (Acesso global/gestor do sistema) ou se a role estiver na lista
     if (req.user.role !== "super_admin" && !roles.includes(req.user.role)) {
       return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
     }
@@ -68,7 +101,6 @@ export function requireRoles(...roles: UserRole[]) {
   };
 }
 
-// RBAC granular - verifica permissoes especificas
 export type Permission =
   | "patients:read" | "patients:write" | "patients:delete"
   | "appointments:read" | "appointments:write" | "appointments:delete"
@@ -122,8 +154,6 @@ export function hasPermission(userRole: UserRole, permission: Permission): boole
   return perms.includes("all") || perms.includes(permission);
 }
 
-// ===== MULTI-TENANT SECURITY =====
-// Middleware que valida isolamento de tenant
 export function requireTenant(req: AuthedRequest, res: Response, next: NextFunction) {
   if (!req.user?.tenantId) {
     return res.status(403).json({ error: "Tenant context nao disponivel. Acesso negado." });
@@ -131,14 +161,12 @@ export function requireTenant(req: AuthedRequest, res: Response, next: NextFunct
   next();
 }
 
-// Valida que um recurso pertence ao tenant do usuario
 export function validateResourceTenant(resourceTenantId: string | undefined, userTenantId: string | undefined): boolean {
   if (!userTenantId) return false;
-  if (!resourceTenantId) return false; // Recurso sem tenant = não permitido
+  if (!resourceTenantId) return false;
   return resourceTenantId === userTenantId;
 }
 
-// Middleware para validar tenant do recurso na URL (e.g., /api/patients/:id)
 export function validateTenantResource(data: { tenantId?: string | null } | null, userTenantId?: string): boolean {
   if (!userTenantId) return false;
   if (!data) return false;
@@ -146,7 +174,6 @@ export function validateTenantResource(data: { tenantId?: string | null } | null
   return data.tenantId === userTenantId;
 }
 
-// Factory para criar middleware que valida tenant de um recurso
 export function validateResourceTenantMiddleware(
   resourceFetcher: (id: string) => Promise<{ tenantId?: string } | null>
 ) {
@@ -155,16 +182,16 @@ export function validateResourceTenantMiddleware(
     if (!resourceId) {
       return res.status(400).json({ error: "Resource ID required" });
     }
-    
+
     const resource = await resourceFetcher(resourceId);
     if (!resource) {
       return res.status(404).json({ error: "Recurso nao encontrado." });
     }
-    
+
     if (!validateTenantResource(resource, req.user?.tenantId)) {
       return res.status(403).json({ error: "Acesso negado. Recurso pertence a outro tenant." });
     }
-    
+
     (req as any).resource = resource;
     next();
   };

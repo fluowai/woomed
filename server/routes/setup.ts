@@ -4,6 +4,8 @@ import { Express } from "express";
 import { loadData, saveData, dataFile, invalidateCache } from "../data";
 import { hashPassword, generateTokens } from "../auth";
 import { ensureCoreAuthSchema, isDatabaseAvailable, isSupabaseRestAvailable, query, queryOne, supabaseRestFindOne, supabaseRestInsert } from "../database";
+import { requireAuth, requireRoles, AuthedRequest } from "../middleware";
+import rateLimit from "express-rate-limit";
 
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
@@ -23,12 +25,20 @@ async function hasConfiguredSuperAdmin() {
   return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
 }
 
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: "Muitas tentativas de setup. Tente novamente em 1 hora." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export function registerSetupRoutes(app: Express) {
   app.get("/api/v2/setup/status", async (_req, res) => {
     res.json({ needsSetup: !(await hasConfiguredSuperAdmin()) });
   });
 
-  app.post("/api/v2/setup/reset", async (_req, res) => {
+  app.post("/api/v2/setup/reset", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
     try {
       if (fs.existsSync(dataFile)) {
         fs.unlinkSync(dataFile);
@@ -36,11 +46,11 @@ export function registerSetupRoutes(app: Express) {
       invalidateCache();
       res.json({ ok: true, message: "Dados resetados. Recarregue a pagina para o onboarding." });
     } catch (e) {
-      res.status(500).json({ error: "Erro ao resetar dados: " + (e instanceof Error ? e.message : e) });
+      res.status(500).json({ error: "Erro ao resetar dados." });
     }
   });
 
-  app.post("/api/v2/setup/complete", async (req, res) => {
+  app.post("/api/v2/setup/complete", setupLimiter, async (req, res) => {
     const data = await loadData();
     if (await hasConfiguredSuperAdmin()) {
       return res.status(400).json({ error: "Super admin ja configurado. Faca login." });
@@ -50,8 +60,8 @@ export function registerSetupRoutes(app: Express) {
     if (!email || !password) {
       return res.status(400).json({ error: "Email e senha obrigatorios." });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Senha deve ter pelo menos 6 caracteres." });
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Senha deve ter pelo menos 8 caracteres." });
     }
 
     const id = crypto.randomUUID();
@@ -74,8 +84,7 @@ export function registerSetupRoutes(app: Express) {
           [id, email, appUser.name, passwordHash]
         );
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Erro desconhecido";
-        return res.status(500).json({ error: `Nao foi possivel criar o super admin no banco: ${detail}` });
+        return res.status(500).json({ error: "Nao foi possivel criar o super admin no banco." });
       }
     } else if (isSupabaseRestAvailable()) {
       try {
@@ -90,8 +99,7 @@ export function registerSetupRoutes(app: Express) {
           mfa_enabled: false
         });
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Erro desconhecido";
-        return res.status(500).json({ error: `Nao foi possivel criar o super admin no Supabase REST: ${detail}` });
+        return res.status(500).json({ error: "Nao foi possivel criar o super admin no Supabase REST." });
       }
     }
 

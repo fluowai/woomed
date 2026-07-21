@@ -53,7 +53,7 @@ export function registerSchedulerRoutes(app: Express) {
   });
 
   app.get("/api/v2/followup/queue", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const fu = (data as any).__followUp || { entries: [] };
     const rt = (data as any).__agentRuntime || { sessions: [], leads: [] };
     const enriched = fu.entries.map((e: any) => {
@@ -72,7 +72,7 @@ export function registerSchedulerRoutes(app: Express) {
 
   app.post("/api/v2/followup/register", requireAuth, async (req: AuthedRequest, res) => {
     const { registerForFollowUp } = await import("../modules/followup");
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { sessionId } = req.body || {};
     if (!sessionId) return res.status(400).json({ error: "sessionId obrigatorio" });
     const rt = (data as any).__agentRuntime || { sessions: [] };
@@ -85,13 +85,13 @@ export function registerSchedulerRoutes(app: Express) {
   app.post("/api/v2/followup/process-now", requireAuth, requireRoles("admin"), async (_req, res) => {
     await findAbandonedSessions();
     await checkFollowUps();
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const fu = (data as any).__followUp || { entries: [] };
     res.json({ ok: true, entriesProcessed: fu.entries.length, message: "Follow-ups processados" });
   });
 
   app.patch("/api/v2/followup/entry/:sessionId", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const fu = (data as any).__followUp || { entries: [] };
     const idx = fu.entries.findIndex((e: any) => e.sessionId === req.params.sessionId);
     if (idx === -1) return res.status(404).json({ error: "Entry not found" });

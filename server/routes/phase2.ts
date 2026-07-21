@@ -54,7 +54,7 @@ export function registerPhase2Routes(app: Express) {
       next();
     });
   }, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const patient = data.patients.find(p => p.id === req.params.patientId);
     if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
     const file = req.file;
@@ -70,14 +70,14 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.get("/api/v2/patients/:patientId/documents", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const docs = data.patientDocuments.filter(d => d.patientId === req.params.patientId);
     res.json(docs);
   });
 
   app.delete("/api/v2/patients/documents/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     const ok = await dataService.deleteOne(TABLES.patientDocuments, req.params.id, req.user!, "patientDocuments");
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const doc = data.patientDocuments.find(d => d.id === req.params.id);
     if (doc) {
       try { await fs.unlink(path.join(process.cwd(), doc.url)); } catch { }
@@ -88,7 +88,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === WAITING LIST ===
   app.get("/api/v2/waiting-list", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json(data.waitingList.sort((a, b) => a.created_at?.localeCompare(b.created_at || "") || 0));
   });
 
@@ -101,7 +101,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.patch("/api/v2/waiting-list/:id", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.waitingList.findIndex(e => e.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Entrada na lista de espera nao encontrada." });
     if (req.body.status === "notified") data.waitingList[idx].notifiedAt = nowIso();
@@ -117,7 +117,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.post("/api/v2/waiting-list/:id/notify", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const entry = data.waitingList.find(e => e.id === req.params.id);
     if (!entry) return res.status(404).json({ error: "Entrada nao encontrada." });
     const updated = await dataService.updateOne<WaitingListEntry>(TABLES.waitingList, req.params.id, { status: "notified", notifiedAt: nowIso() }, req.user!, "waitingList");
@@ -126,7 +126,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.post("/api/v2/waiting-list/auto-schedule", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { doctorId, cancelledDate, cancelledTime } = req.body || {};
     if (!doctorId || !cancelledDate) return res.status(400).json({ error: "Profissional e data do cancelamento obrigatorios." });
     const candidates = data.waitingList.filter(e =>
@@ -145,7 +145,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === SCHEDULE BLOCKS ===
   app.get("/api/v2/schedule-blocks", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const doctorId = String(req.query.doctorId || "");
     const blocks = data.scheduleBlocks.filter(b => !doctorId || b.doctorId === doctorId).sort((a, b) => a.date.localeCompare(b.date));
     res.json(blocks);
@@ -167,7 +167,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === MEDICAL TEMPLATES ===
   app.get("/api/v2/medical-templates", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const specialty = String(req.query.specialty || "");
     const templateType = String(req.query.templateType || "");
     const templates = data.medicalTemplates.filter(t =>
@@ -204,7 +204,7 @@ export function registerPhase2Routes(app: Express) {
       return res.status(400).json({ error: "Paciente, medico e medicamentos obrigatorios." });
     }
     const prescription = { id: `rx-${Date.now()}`, patientName, doctorName, doctorCrm: doctorCrm || "", diagnosis: diagnosis || "", medications: medications as string[], notes: notes || "", issuedAt: nowIso() };
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const patient = data.patients.find(p => p.fullName.toUpperCase() === patientName.toUpperCase());
     if (patient && data.medicalRecords[patient.id]) {
       const record = data.medicalRecords[patient.id];
@@ -221,7 +221,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === MEDICAL RECORD ENTRIES (V2) ===
   app.post("/api/v2/medical-records/:patientId/entries", requireAuth, requireRoles("admin", "doctor"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const record = data.medicalRecords[req.params.patientId];
     const patient = data.patients.find(p => p.id === req.params.patientId);
     if (!record || !patient) return res.status(404).json({ error: "Paciente ou prontuario nao encontrado." });
@@ -240,7 +240,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === ACCOUNTS PAYABLE ===
   app.get("/api/v2/accounts-payable", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const status = String(req.query.status || "");
     const items = data.accountsPayable.filter(a => !status || a.status === status).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     res.json(items);
@@ -255,7 +255,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.patch("/api/v2/accounts-payable/:id", requireAuth, requireRoles("admin", "finance"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.accountsPayable.findIndex(a => a.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Conta a pagar nao encontrada." });
     const updateFields: Partial<AccountsPayable> = { ...req.body };
@@ -273,7 +273,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === DRE ===
   app.get("/api/v2/dre", requireAuth, requireRoles("admin", "finance"), async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const month = String(req.query.month || nowIso().slice(0, 7));
     const transactions = data.financeTransactions.filter(t => t.date.startsWith(month));
     const payables = data.accountsPayable.filter(a => a.dueDate.startsWith(month));
@@ -292,7 +292,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === PAYMENT GATEWAY ===
   app.get("/api/v2/payment-gateway", requireAuth, requireRoles("admin", "finance"), async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const decryptedConfig = data.paymentGatewayConfig.map(cfg => ({ ...cfg, apiKey: ensureDecrypted(cfg.apiKey), secretKey: cfg.secretKey ? ensureDecrypted(cfg.secretKey) : undefined, webhookSecret: cfg.webhookSecret ? ensureDecrypted(cfg.webhookSecret) : undefined }));
     res.json(decryptedConfig);
   });
@@ -301,7 +301,7 @@ export function registerPhase2Routes(app: Express) {
     const parsed = paymentGatewaySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const config: PaymentGatewayConfig = { ...parsed.data, enabled: true, apiKey: ensureEncrypted(parsed.data.apiKey), secretKey: parsed.data.secretKey ? ensureEncrypted(parsed.data.secretKey) : undefined, webhookSecret: parsed.data.webhookSecret ? ensureEncrypted(parsed.data.webhookSecret) : undefined };
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const existing = data.paymentGatewayConfig.findIndex(g => g.provider === config.provider);
     if (existing >= 0) { data.paymentGatewayConfig[existing] = config; } else { data.paymentGatewayConfig.push(config); }
     await audit(data, req.user!, "configure", "payment_gateway", config.provider, `${config.provider} ${config.enabled ? "ativado" : "desativado"}`);
@@ -310,7 +310,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.patch("/api/v2/payment-gateway/:provider", requireAuth, requireRoles("admin", "finance"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.paymentGatewayConfig.findIndex(g => g.provider === req.params.provider);
     if (idx === -1) return res.status(404).json({ error: "Gateway nao encontrado." });
     const updateData = { ...req.body };
@@ -325,7 +325,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.delete("/api/v2/payment-gateway/:provider", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.paymentGatewayConfig.findIndex(g => g.provider === req.params.provider);
     if (idx === -1) return res.status(404).json({ error: "Gateway nao encontrado." });
     data.paymentGatewayConfig.splice(idx, 1);
@@ -336,7 +336,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === PIX SIMULATION ===
   app.post("/api/v2/payments/pix", requireAuth, requireRoles("admin", "finance", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { appointmentId, value } = req.body || {};
     if (!appointmentId || !value) return res.status(400).json({ error: "Agendamento e valor obrigatorios." });
     const apt = data.appointments.find(a => a.id === appointmentId);
@@ -351,7 +351,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === EXPORT CSV/XLSX ===
   app.get("/api/v2/export/:entity", requireAuth, requireRoles("admin"), async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const entity = req.params.entity;
     const format = String(req.query.format || "csv");
     let rows: Record<string, unknown>[] = [];
@@ -388,7 +388,7 @@ export function registerPhase2Routes(app: Express) {
 
   // === WHATSAPP CONFIRMATION / REMINDER ===
   app.post("/api/v2/appointments/:id/send-confirmation", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const apt = data.appointments.find(a => a.id === req.params.id);
     if (!apt) return res.status(404).json({ error: "Agendamento nao encontrado." });
     const patient = data.patients.find(p => p.fullName.toUpperCase() === apt.patientName.toUpperCase());
@@ -408,7 +408,7 @@ export function registerPhase2Routes(app: Express) {
   });
 
   app.post("/api/v2/appointments/:id/send-reminder", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const apt = data.appointments.find(a => a.id === req.params.id);
     if (!apt) return res.status(404).json({ error: "Agendamento nao encontrado." });
     const patient = data.patients.find(p => p.fullName.toUpperCase() === apt.patientName.toUpperCase());

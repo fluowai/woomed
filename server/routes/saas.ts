@@ -12,12 +12,12 @@ export function registerSaaSRoutes(app: Express) {
   // ==================== TENANTS ====================
 
   app.get("/api/v2/saas/tenants", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ tenants: data.tenants.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
   });
 
   app.post("/api/v2/saas/tenants", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { slug, legalName, tradeName, document, ownerName, ownerEmail, phone, planId } = req.body || {};
     if (!slug || !legalName) return res.status(400).json({ error: "slug e legalName sao obrigatorios." });
     if (data.tenants.find(t => t.slug === slug)) return res.status(409).json({ error: "Ja existe um tenant com este slug." });
@@ -47,7 +47,7 @@ export function registerSaaSRoutes(app: Express) {
   });
 
   app.patch("/api/v2/saas/tenants/:id", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.tenants.findIndex(t => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Tenant nao encontrado." });
     const allowedFields: (keyof Tenant)[] = ["legalName", "tradeName", "document", "ownerName", "ownerEmail", "phone", "status", "planId", "timezone", "locale", "settings", "trialEndsAt"];
@@ -60,7 +60,7 @@ export function registerSaaSRoutes(app: Express) {
   });
 
   app.delete("/api/v2/saas/tenants/:id", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.tenants.findIndex(t => t.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Tenant nao encontrado." });
     const removed = data.tenants.splice(idx, 1)[0];
@@ -70,7 +70,7 @@ export function registerSaaSRoutes(app: Express) {
   });
 
   app.post("/api/v2/saas/tenants/:id/access", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const tenant = data.tenants.find(t => t.id === req.params.id);
     if (!tenant) return res.status(404).json({ error: "Tenant nao encontrado." });
     if (tenant.status === "suspended" || tenant.status === "cancelled") {
@@ -92,12 +92,12 @@ export function registerSaaSRoutes(app: Express) {
   // ==================== PLANS ====================
 
   app.get("/api/v2/saas/plans", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ plans: data.plans.sort((a, b) => a.sortOrder - b.sortOrder) });
   });
 
   app.post("/api/v2/saas/plans", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { code, name, description, priceCents, currency, billingInterval, limits, features } = req.body || {};
     if (!code || !name) return res.status(400).json({ error: "code e name sao obrigatorios." });
     if (data.plans.find(p => p.code === code)) return res.status(409).json({ error: "Ja existe um plano com este codigo." });
@@ -125,7 +125,7 @@ export function registerSaaSRoutes(app: Express) {
   });
 
   app.patch("/api/v2/saas/plans/:id", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.plans.findIndex(p => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Plano nao encontrado." });
     const allowedFields: (keyof SaaSPlan)[] = ["code", "name", "description", "priceCents", "currency", "billingInterval", "limits", "features", "isActive", "sortOrder"];
@@ -138,7 +138,7 @@ export function registerSaaSRoutes(app: Express) {
   });
 
   app.delete("/api/v2/saas/plans/:id", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.plans.findIndex(p => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Plano nao encontrado." });
     const removed = data.plans.splice(idx, 1)[0];
@@ -151,7 +151,7 @@ export function registerSaaSRoutes(app: Express) {
   // ==================== DASHBOARD STATS ====================
 
   app.get("/api/v2/saas/stats", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const activeTenants = data.tenants.filter(t => t.status === "active");
     const trialingTenants = data.tenants.filter(t => t.status === "trialing");
     const totalMRR = data.plans.reduce((sum, plan) => {

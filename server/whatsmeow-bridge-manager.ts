@@ -64,6 +64,12 @@ async function buildBridge(): Promise<void> {
 }
 
 export async function startBridge(): Promise<string> {
+  if (process.env.WHATSMEOW_EXTERNAL_URL) {
+    bridgeUrl = process.env.WHATSMEOW_EXTERNAL_URL;
+    console.log(`[WhatsMeow Manager] Usando bridge externa conteinerizada em: ${bridgeUrl}`);
+    return bridgeUrl;
+  }
+
   if (bridgeUrl) return bridgeUrl;
 
   const port = await findAvailablePort();
@@ -165,6 +171,7 @@ export function getBridgeUrl(): string {
 }
 
 export function isBridgeRunning(): boolean {
+  if (process.env.WHATSMEOW_EXTERNAL_URL) return true;
   return Boolean(bridgeUrl && bridgeProcess);
 }
 

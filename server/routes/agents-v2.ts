@@ -44,7 +44,7 @@ export function registerAgentRoutes(app: Express) {
 
   // Actions
   app.get("/api/v2/agents/actions", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const rt = runtimeOf(data);
     res.json({ actions: rt.actions });
   });
@@ -56,7 +56,7 @@ export function registerAgentRoutes(app: Express) {
 
   // Human handoff / AI pause controls
   app.get("/api/v2/agents/conversation-controls", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ controls: data.agentConversationControls || [] });
   });
 
@@ -110,7 +110,7 @@ export function registerAgentRoutes(app: Express) {
   });
 
   app.get("/api/v2/agents/leads/:id", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const rt = runtimeOf(data);
     const lead = rt.leads.find((l: any) => l.id === req.params.id);
     if (!lead) return res.status(404).json({ error: "Lead nao encontrado" });
@@ -142,12 +142,12 @@ export function registerAgentRoutes(app: Express) {
 
   // Procedure catalog used by procedure/beauty/aesthetics agents
   app.get("/api/v2/agents/procedures", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ procedures: data.procedureCatalog || [] });
   });
 
   app.post("/api/v2/agents/procedures", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const body = req.body || {};
     const name = String(body.name || "").trim();
     if (!name) return res.status(400).json({ error: "Nome do procedimento e obrigatorio" });
@@ -177,7 +177,7 @@ export function registerAgentRoutes(app: Express) {
   });
 
   app.patch("/api/v2/agents/procedures/:id", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const procedures = data.procedureCatalog || [];
     const idx = procedures.findIndex(p => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Procedimento nao encontrado" });
@@ -189,7 +189,7 @@ export function registerAgentRoutes(app: Express) {
 
   // Metrics
   app.get("/api/v2/agents/metrics", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const rt = runtimeOf(data);
     const agents = data.serviceAgents.filter(a => a.status === "active");
 
@@ -246,7 +246,7 @@ export function registerAgentRoutes(app: Express) {
 
   // Pipeline summary (for dashboard)
   app.get("/api/v2/agents/pipeline", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const rt = runtimeOf(data);
 
     const stages = ["novo", "contatado", "qualificado", "agendando", "agendado", "convertido", "perdido"];

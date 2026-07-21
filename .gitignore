@@ -12,6 +12,8 @@ uploads/
 .env.production
 .env.*
 !.env.example
+!.env.production.example
+deploy/portainer-stack.ready.yml
 *.exe
 *.exe~
 *~

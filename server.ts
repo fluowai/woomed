@@ -10,6 +10,7 @@ import { registerRoutes } from "./server/routes/index";
 import { registerSetupRoutes } from "./server/routes/setup";
 import { registerOnboardingRoutes } from "./server/routes/onboarding";
 import { registerPublicRoutes } from "./server/routes/public";
+import { logger } from "./server/logger";
 import type { Express } from "express";
 
 export function createApp(): Express {
@@ -19,7 +20,7 @@ export function createApp(): Express {
     ? process.env.CORS_ORIGIN === "true" ? true : process.env.CORS_ORIGIN.split(",").map(s => s.trim())
     : process.env.NODE_ENV === "production"
       ? process.env.APP_URL || false
-      : true;
+      : ["http://localhost:5173", "http://localhost:3000"];
   app.use(cors({
     origin: corsOrigin,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -31,7 +32,7 @@ export function createApp(): Express {
       useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https://api.dicebear.com"],
         connectSrc: ["'self'", "ws:", "wss:", "https://api.openai.com", "https://api.anthropic.com", "https://api.groq.com", "https://generativelanguage.googleapis.com"],
@@ -51,7 +52,7 @@ export function createApp(): Express {
     (req as any).requestId = requestId();
     const start = Date.now();
     _res.on("finish", () => {
-      console.log(`[${(req as any).requestId}] ${req.method} ${req.path} ${_res.statusCode} ${Date.now() - start}ms`);
+      logger.info(`${req.method} ${req.path} ${_res.statusCode}`, { requestId: (req as any).requestId, meta: { duration: `${Date.now() - start}ms` } });
     });
     next();
   });
@@ -65,6 +66,10 @@ export function createApp(): Express {
   app.use("/api/v2/auth/change-password", mfaRateLimiter);
   const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { error: "Muitas requisicoes. Tente novamente em 1 minuto." }, standardHeaders: true, legacyHeaders: false });
   app.use("/api/", apiLimiter);
+  const publicLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { error: "Muitas requisicoes. Tente novamente em 1 minuto." }, standardHeaders: true, legacyHeaders: false });
+  app.use("/api/v2/public/", publicLimiter);
+  app.use("/api/v2/portal/", publicLimiter);
+  app.use("/api/v2/setup/", publicLimiter);
 
   // Unauthenticated routes
   registerSetupRoutes(app);
@@ -110,30 +115,30 @@ async function startServer() {
       try {
         await runMigrations();
         await runSeed();
-        console.log("PostgreSQL connected and migrations applied.");
+        logger.info("PostgreSQL connected and migrations applied.");
         lastError = null;
         break;
       } catch (error) {
         lastError = error;
-        console.warn(`PostgreSQL not ready yet (${attempt}/30):`, error instanceof Error ? error.message : error);
+        logger.warn(`PostgreSQL not ready yet (${attempt}/30)`, { meta: { error: error instanceof Error ? error.message : error } });
         await sleep(2000);
       }
     }
     if (lastError) {
-      console.error("PostgreSQL migration failed after retries:", lastError);
+      logger.error("PostgreSQL migration failed after retries", { meta: { error: lastError instanceof Error ? lastError.message : lastError } });
       if (process.env.NODE_ENV === "production") throw lastError;
     }
   } else {
-    console.log("No DATABASE_URL configured. Using JSON file storage.");
+    logger.info("No DATABASE_URL configured. Using JSON file storage.");
   }
 
   // Start whatsmeow bridge
   if (!process.env.WHATSMEOW_API_URL) {
-    const { startBridge, stopBridge } = require("./server/whatsmeow-bridge-manager");
+    const { startBridge, stopBridge } = await import("./server/whatsmeow-bridge-manager");
     startBridge()
       .then(async (bridgeUrl: string) => {
         setWhatsmeowApiUrl(bridgeUrl);
-        console.log(`Whatsmeow bridge integrated at ${bridgeUrl}`);
+        logger.info(`Whatsmeow bridge integrated at ${bridgeUrl}`);
         try {
           const { loadData } = await import("./server/data");
           const { callWhatsmeowBridge } = await import("./server/whatsapp-utils");
@@ -147,9 +152,9 @@ async function startServer() {
               });
               if (resp) conn.status = "connected";
               if (resp?.deviceJid) conn.deviceJid = String(resp.deviceJid);
-              console.log(`[WhatsApp] Auto-reconnected session ${conn.name}`);
+              logger.info(`[WhatsApp] Auto-reconnected session ${conn.name}`);
             } catch (e) {
-              console.warn(`[WhatsApp] Failed to reconnect ${conn.name}:`, e instanceof Error ? e.message : e);
+              logger.warn(`[WhatsApp] Failed to reconnect ${conn.name}`, { meta: { error: e instanceof Error ? e.message : e } });
               conn.status = "disconnected";
             }
             conn.updatedAt = new Date().toISOString();
@@ -159,12 +164,12 @@ async function startServer() {
             await saveData(data);
           }
         } catch (e) {
-          console.warn("[WhatsApp] Auto-reconnect check failed:", e);
+          logger.warn("[WhatsApp] Auto-reconnect check failed", { meta: { error: e instanceof Error ? e.message : e } });
         }
       })
       .catch((error: Error) => {
-        console.error("Failed to start embedded whatsmeow bridge:", error);
-        console.log("WhatsApp features will be unavailable. Set WHATSMEOW_API_URL to use an external bridge.");
+        logger.error("Failed to start embedded whatsmeow bridge", { meta: { error: error.message } });
+        logger.info("WhatsApp features will be unavailable. Set WHATSMEOW_API_URL to use an external bridge.");
       });
   }
 
@@ -195,13 +200,19 @@ async function startServer() {
   }
 
   function errorHandler(err: any, req: express.Request, res: express.Response, _next: express.NextFunction) {
-    console.error(`[${(req as any).requestId}] ${err?.message || err}`);
-    res.status(err?.status || 500).json({ error: err?.message || "Erro interno do servidor." });
+    const requestId = (req as any).requestId || "unknown";
+    const status = err?.status || 500;
+    logger.error(`${err?.message || err}`, { requestId, meta: { status } });
+    if (process.env.NODE_ENV === "production") {
+      res.status(status).json({ error: status === 500 ? "Erro interno do servidor." : err?.message || "Erro." });
+    } else {
+      res.status(status).json({ error: err?.message || "Erro interno do servidor." });
+    }
   }
   app.use(errorHandler);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    logger.info(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

@@ -23,13 +23,13 @@ function publicUser(user: AppUser) {
 
 export function registerOnboardingRoutes(app: Express) {
   app.get("/api/v2/onboarding/plans", async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const plans = mergeDefaultPlans(data.plans).filter(plan => plan.isActive);
     res.json({ plans });
   });
 
   app.post("/api/v2/onboarding/clinic", async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     data.plans = mergeDefaultPlans(data.plans);
 
     const {

@@ -6,34 +6,39 @@ services:
     environment:
       POSTGRES_DB: consultio
       POSTGRES_USER: consultio
-      POSTGRES_PASSWORD: "consultiopassword"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-consultiopassword}"
     volumes:
       - data_postgres:/var/lib/postgresql/data
     networks:
       - woomed-internal
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consultio -d consultio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   api:
     image: ghcr.io/fluowai/consultio-api:latest
+    env_file:
+      - .env.production
     environment:
       NODE_ENV: production
       PORT: "5173"
       APP_URL: "https://woomed.consultio.com.br"
-      ALLOWED_ORIGINS: "https://woomed.consultio.com.br"
       CORS_ORIGIN: "https://woomed.consultio.com.br"
-      JWT_SECRET: "bhj47BqUl6kamMPlO1lTR8gEiiKJNgD8m7acHGwJGwXkS1ywp63fq6pLMEWiCQDwmeB44AId/a4mA+HyJn/J6g=="
-      ENCRYPTION_MASTER_KEY: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
-      DATABASE_URL: "postgresql://consultio:consultiopassword@postgres:5432/consultio"
+      DATABASE_URL: "postgresql://consultio:${DB_PASSWORD:-consultiopassword}@postgres:5432/consultio"
       WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
-      WHATSMEOW_WEBHOOK_SECRET: "Zq4Tn8KvR2Lp9YxMf7HsDc5BaE1WuGj3NiXr0CeUtQ"
-      PLATFORM_OWNER_EMAIL: "noreplay@wootech.com.br"
-      PLATFORM_OWNER_PASSWORD: "consultiopassword"
     volumes:
       - data_api:/app/data
       - data_uploads:/app/uploads
     networks:
       - woopanel1
       - woomed-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=woopanel1"
@@ -43,6 +48,12 @@ services:
       - "traefik.http.routers.woomed_api.priority=200"
       - "traefik.http.routers.woomed_api.service=woomed_api"
       - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5173/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: always
 
   frontend:
@@ -52,6 +63,9 @@ services:
     networks:
       - woopanel1
       - woomed-internal
+    depends_on:
+      api:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=woopanel1"
@@ -69,7 +83,7 @@ services:
       PORT: "8080"
       WHATSMEOW_DATA_DIR: /app/data
       APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
-      WHATSMEOW_WEBHOOK_SECRET: "Zq4Tn8KvR2Lp9YxMf7HsDc5BaE1WuGj3NiXr0CeUtQ"
+      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET}"
     volumes:
       - data_wpp:/app/data
     networks:

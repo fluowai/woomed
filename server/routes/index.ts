@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData, AppData } from "../data";
-import { AuthedRequest, sessions, getToken, requireAuth, requireRoles } from "../middleware";
+import { AuthedRequest, deleteSession, getToken, requireAuth, requireRoles } from "../middleware";
 import { audit, getServicePrice, isSlotAvailable, buildSuggestions, addMinutes, normalize, nowIso, sanitizeUpdate, maskCpf } from "../helpers";
 import { patientSchema, appointmentSchema, financeTransactionSchema, agentSchema, campaignSchema } from "../schemas";
 import {
@@ -12,6 +12,7 @@ import {
 import { dataService, TABLES } from "../data-service";
 import { getAuditEvents } from "../audit";
 import { featureGuard, limitGuard, resolveTenantPlan } from "../plan-guard";
+import { isDatabaseAvailable } from "../database";
 
 function ensureId() {
   return randomUUID();
@@ -30,12 +31,19 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/auth/logout", requireAuth, async (req: AuthedRequest, res) => {
     const token = getToken(req);
-    if (token) sessions.delete(token);
+    if (token) deleteSession(token);
     res.json({ ok: true });
   });
 
   app.get("/api/bootstrap", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const isDb = isDatabaseAvailable();
+    let data;
+    if (isDb && req.user?.tenantId) {
+      // If DB is available, only load data for the current tenant to save memory
+      data = (await dataService.loadFullState(req.user?.tenantId)) || await loadData(req.user?.tenantId);
+    } else {
+      data = await loadData(req.user?.tenantId);
+    }
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
     const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10)));
     const state = buildState(data, req.user!);
@@ -50,8 +58,7 @@ export function registerRoutes(app: Express) {
 
   // PATIENTS
   app.get("/api/patients", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
-    let items = data.patients.filter(p => !req.user?.tenantId || (p as any).tenantId === req.user.tenantId);
+    let items = await dataService.getPatients(req.user?.tenantId);
     const search = String(req.query.search || "").toLowerCase().trim();
     if (search) items = items.filter(p => p.fullName.toLowerCase().includes(search) || (p.cpf && p.cpf.includes(search)));
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
@@ -74,7 +81,7 @@ export function registerRoutes(app: Express) {
     };
     const created = await dataService.createPatient(newPatient, req.user!, req.user?.tenantId);
     const medicalRecord = { patientId: created.id, bloodType: "Desconhecido", gender: "Nao informado", allergies: [] as string[], medications: [] as string[], chronicDiseases: [] as string[], entries: [] as any[] };
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     data.medicalRecords[created.id] = medicalRecord as any;
     await saveData(data);
     res.json({ patient: created, medicalRecord });
@@ -83,7 +90,7 @@ export function registerRoutes(app: Express) {
   app.put("/api/patients/:id", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
     const updated = await dataService.updatePatient(req.params.id, req.body as Partial<Patient>, req.user!);
     if (!updated) return res.status(404).json({ error: "Paciente nao encontrado." });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ patient: updated, appointments: data.appointments });
   });
 
@@ -109,7 +116,7 @@ export function registerRoutes(app: Express) {
       workingHours: workingHours || { start: "08:00", end: "18:00" }
     };
     const created = await dataService.createDoctor(doctor, req.user?.tenantId);
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     await audit(data, req.user!, "create", "doctor", created.id, created.name);
     await saveData(data);
     res.json({ doctor: created });
@@ -120,14 +127,14 @@ export function registerRoutes(app: Express) {
     const payload = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => (allowed as readonly string[]).includes(key)));
     const updated = await dataService.updateDoctor(req.params.id, payload as any);
     if (!updated) return res.status(404).json({ error: "Profissional nao encontrado." });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     await audit(data, req.user!, "update", "doctor", updated.id, updated.name);
     await saveData(data);
     res.json({ doctor: updated });
   });
 
   app.delete("/api/doctors/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const hasAppointments = data.appointments.some(appointment => appointment.doctorId === req.params.id);
     if (hasAppointments) return res.status(409).json({ error: "Nao e possivel remover profissional com agendamentos vinculados." });
     const ok = await dataService.deleteDoctor(req.params.id);
@@ -139,7 +146,7 @@ export function registerRoutes(app: Express) {
 
   // APPOINTMENTS
   app.post("/api/appointments", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const parsed = appointmentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const { patientId, doctorId, date, timeStart, type, observations } = parsed.data;
@@ -162,7 +169,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.patch("/api/appointments/:id/status", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const apt = data.appointments.find(a => a.id === req.params.id);
     if (!apt) return res.status(404).json({ error: "Agendamento nao encontrado." });
     apt.status = req.body.status;
@@ -175,7 +182,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.patch("/api/appointments/:id/payment", requireAuth, requireRoles("admin", "finance", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const apt = data.appointments.find(a => a.id === req.params.id);
     if (!apt) return res.status(404).json({ error: "Agendamento nao encontrado." });
     apt.paymentStatus = req.body.paymentStatus || "paid";
@@ -192,8 +199,7 @@ export function registerRoutes(app: Express) {
 
   // GET appointments com paginacao
   app.get("/api/appointments", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
-    let items = data.appointments.filter(a => !req.user?.tenantId || (a as any).tenantId === req.user.tenantId);
+    let items = await dataService.getAppointments(req.user?.tenantId);
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
     const total = items.length;
@@ -203,8 +209,8 @@ export function registerRoutes(app: Express) {
 
   // GET appointments por data com paginacao
   app.get("/api/appointments/date/:date", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
-    let items = data.appointments.filter(a => (a.date === req.params.date) && (!req.user?.tenantId || (a as any).tenantId === req.user.tenantId));
+    let items = await dataService.getAppointments(req.user?.tenantId);
+    items = items.filter(a => a.date === req.params.date);
     items.sort((a, b) => a.timeStart.localeCompare(b.timeStart));
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
@@ -215,7 +221,7 @@ export function registerRoutes(app: Express) {
 
   // MEDICAL RECORDS
   app.patch("/api/medical-records/:patientId/metadata", requireAuth, requireRoles("admin", "doctor"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const record = data.medicalRecords[req.params.patientId];
     if (!record) return res.status(404).json({ error: "Prontuario nao encontrado." });
     data.medicalRecords[req.params.patientId] = { ...record, ...req.body };
@@ -225,7 +231,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.post("/api/medical-records/:patientId/entries", requireAuth, requireRoles("admin", "doctor"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const record = data.medicalRecords[req.params.patientId];
     const patient = data.patients.find(p => p.id === req.params.patientId);
     if (!record || !patient) return res.status(404).json({ error: "Paciente ou prontuario nao encontrado." });
@@ -263,8 +269,7 @@ export function registerRoutes(app: Express) {
 
   // GET finance transactions com paginacao
   app.get("/api/finance/transactions", requireAuth, requireRoles("admin", "finance"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
-    let items = data.financeTransactions.filter(t => !req.user?.tenantId || (t as any).tenantId === req.user.tenantId);
+    let items = await dataService.getFinanceTransactions(req.user?.tenantId);
     const type = String(req.query.type || "").toLowerCase();
     if (type === "income" || type === "expense") {
       items = items.filter(t => (t.value > 0 && type === "income") || (t.value < 0 && type === "expense"));
@@ -310,7 +315,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.post("/api/agent-templates/:id/use", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const template = data.agentTemplates.find(item => item.id === req.params.id);
     if (!template) return res.status(404).json({ error: "Modelo de agente nao encontrado." });
     const agent: ServiceAgent = {
@@ -328,7 +333,7 @@ export function registerRoutes(app: Express) {
 
   // LLM PROVIDERS
   app.post("/api/llms", requireAuth, requireRoles("admin"), featureGuard("ai"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { name, provider, model, apiKey, endpoint, temperature = 0.35, maxTokens = 1200, isDefault = false } = req.body || {};
     if (!name || !provider || !model) return res.status(400).json({ error: "Nome, provedor e modelo obrigatorios." });
     if (isDefault) data.llmProviderConfigs = data.llmProviderConfigs.map(item => ({ ...item, isDefault: false }));
@@ -345,7 +350,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.patch("/api/llms/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.llmProviderConfigs.findIndex(item => item.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "LLM nao encontrada." });
     if (req.body?.isDefault) data.llmProviderConfigs = data.llmProviderConfigs.map(item => ({ ...item, isDefault: false }));
@@ -366,7 +371,7 @@ export function registerRoutes(app: Express) {
 
   // NEURAL KNOWLEDGE
   app.post("/api/neural/knowledge", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { title, category, content, sourceType = "manual", sourceUrl, targetAgentIds = [], tags = [] } = req.body || {};
     if (!title || !content) return res.status(400).json({ error: "Titulo e conhecimento obrigatorios." });
     const now = nowIso();
@@ -422,7 +427,7 @@ export function registerRoutes(app: Express) {
 
   // TISS
   app.post("/api/tiss/guides", requireAuth, requireRoles("admin", "finance", "reception"), featureGuard("tiss"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { patientName, operator, procedure, value = 0 } = req.body || {};
     if (!patientName || !operator || !procedure) return res.status(400).json({ error: "Paciente, operadora e procedimento obrigatorios." });
     const guide: TissGuide = {
@@ -448,7 +453,7 @@ export function registerRoutes(app: Express) {
 
   // INVENTORY
   app.post("/api/inventory/items", requireAuth, requireRoles("admin", "reception"), featureGuard("estoque"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { name, category, quantity = 0, minQuantity = 0, unit = "unidades", expiresAt = "", supplier = "Nao informado" } = req.body || {};
     if (!name || !category) return res.status(400).json({ error: "Nome e categoria obrigatorios." });
     const item: InventoryItem = {
@@ -473,7 +478,7 @@ export function registerRoutes(app: Express) {
 
   // REFERRALS
   app.post("/api/referrals", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { patientName, referredName, reward } = req.body || {};
     if (!patientName || !referredName) return res.status(400).json({ error: "Paciente indicador e indicado obrigatorios." });
     const referral: ReferralRecord = {
@@ -499,7 +504,7 @@ export function registerRoutes(app: Express) {
 
   // REFERENCES
   app.post("/api/references", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { title, category, url, summary } = req.body || {};
     if (!title || !category) return res.status(400).json({ error: "Titulo e categoria obrigatorios." });
     const ref: ReferenceMaterial = {
@@ -518,7 +523,7 @@ export function registerRoutes(app: Express) {
 
   // HELP TICKETS
   app.post("/api/help/tickets", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { title, module, priority, description } = req.body || {};
     if (!title || !module) return res.status(400).json({ error: "Titulo e modulo obrigatorios." });
     const ticket: HelpTicket = {
@@ -564,7 +569,7 @@ export function registerRoutes(app: Express) {
 
       // Auto-detect from active LLM configs if no provider specified
       if (!selectedProvider) {
-        const data = await loadData();
+        const data = await loadData(req.user?.tenantId);
         const defaultLlm = data.llmProviderConfigs?.find(l => l.isDefault && l.isActive);
         if (defaultLlm) {
           // We'd need the decrypted key - for now, use env vars as source of truth
@@ -588,7 +593,7 @@ export function registerRoutes(app: Express) {
   // SUGGESTIONS
   app.post("/api/suggestions", requireAuth, async (req, res) => {
     try {
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       const { doctor, doctorId, requestedSlot, currentAppointments } = req.body;
       const selectedDoctor = doctor || data.doctors.find(d => d.id === doctorId);
       if (!selectedDoctor || !requestedSlot?.date || !requestedSlot?.time)

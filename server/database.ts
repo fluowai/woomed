@@ -430,7 +430,11 @@ export async function runMigrations(): Promise<void> {
         "utf-8"
       )},
       { name: "004_rls_policies", sql: fs.readFileSync(
-        path.join(__dirname, "migrations", "004_rls_policies.sql"),
+        path.join(__dirname, "migrations", "0004_rls_policies.sql"),
+        "utf-8"
+      )},
+      { name: "005_tiss_expansion", sql: fs.readFileSync(
+        path.join(__dirname, "migrations", "005_tiss_expansion.sql"),
         "utf-8"
       )}
     ];
@@ -438,9 +442,17 @@ export async function runMigrations(): Promise<void> {
     for (const migration of migrationFiles) {
       const exists = await client.query("SELECT id FROM _migrations WHERE name = $1", [migration.name]);
       if (exists.rows.length === 0) {
-        await client.query(migration.sql);
-        await client.query("INSERT INTO _migrations (name) VALUES ($1)", [migration.name]);
-        console.log(`Migration ${migration.name} executed successfully.`);
+        await client.query("BEGIN");
+        try {
+          await client.query(migration.sql);
+          await client.query("INSERT INTO _migrations (name) VALUES ($1)", [migration.name]);
+          await client.query("COMMIT");
+          console.log(`Migration ${migration.name} executed successfully.`);
+        } catch (err) {
+          await client.query("ROLLBACK");
+          console.error(`Migration ${migration.name} failed and was rolled back.`, err instanceof Error ? err.message : err);
+          throw err;
+        }
       }
     }
 
