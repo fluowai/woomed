@@ -2,7 +2,7 @@ import { Express } from "express";
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
 import { loadData, saveData } from "../data";
-import { AuthedRequest, sessions, requireAuth, requireRoles } from "../middleware";
+import { AuthedRequest, resolveUser, requireAuth, requireRoles } from "../middleware";
 import { audit, nowIso } from "../helpers";
 import {
   broadcastWhatsAppRealtime, sanitizeConnection, normalizeConnectionStatus,
@@ -29,7 +29,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   wss.on("connection", (socket, req) => {
     const url = new URL(req.url || "", "http://localhost");
     const token = url.searchParams.get("token") || "";
-    const user = sessions.get(token);
+    const user = resolveUser(token);
     if (!user) { socket.close(1008, "Sessao invalida."); return; }
     whatsappSockets.add(socket);
     socket.send(JSON.stringify({ type: "ready", payload: { userId: user.id }, at: nowIso() }));
@@ -38,12 +38,12 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.get("/api/whatsapp/connections", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json({ connections: data.whatsappConnections.map(sanitizeConnection) });
   });
 
   app.post("/api/whatsapp/connections", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { name } = req.body || {};
     if (!name) return res.status(400).json({ error: "Nome da conexao e obrigatorio." });
     if (data.whatsappConnections.find(c => c.name === String(name).trim())) return res.status(409).json({ error: "Ja existe conexao com este nome." });
@@ -56,7 +56,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.delete("/api/whatsapp/connections/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.whatsappConnections.findIndex(c => c.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Conexao nao encontrada." });
     const removed = data.whatsappConnections.splice(idx, 1)[0];
@@ -69,7 +69,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.post("/api/whatsapp/connections/:id/connect", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const conn = data.whatsappConnections.find(c => c.id === req.params.id);
     if (!conn) return res.status(404).json({ error: "Conexao nao encontrada." });
     conn.status = "connecting"; conn.error = undefined; conn.updatedAt = nowIso();
@@ -95,7 +95,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.post("/api/whatsapp/connections/:id/disconnect", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const conn = data.whatsappConnections.find(c => c.id === req.params.id);
     if (!conn) return res.status(404).json({ error: "Conexao nao encontrada." });
     try { 
@@ -109,7 +109,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.post("/api/whatsapp/connections/:id/sync", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const conn = data.whatsappConnections.find(c => c.id === req.params.id);
     if (!conn) return res.status(404).json({ error: "Conexao nao encontrada." });
     try {
@@ -145,13 +145,13 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.get("/api/whatsapp/conversations", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const connectionId = String(req.query.connectionId || "");
     res.json({ conversations: data.whatsappConversations.filter(c => !connectionId || c.connectionId === connectionId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
   });
 
   app.patch("/api/whatsapp/conversations/:id/lead", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const conv = data.whatsappConversations.find(c => c.id === req.params.id);
     if (!conv) return res.status(404).json({ error: "Conversa nao encontrada." });
     const leadName = String(req.body?.leadName || "").trim();
@@ -164,7 +164,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.get("/api/whatsapp/conversations/:id/messages", requireAuth, async (req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const conv = data.whatsappConversations.find(c => c.id === req.params.id);
     if (!conv) return res.status(404).json({ error: "Conversa nao encontrada." });
     conv.unreadCount = 0; await saveData(data);
@@ -172,7 +172,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   });
 
   app.post("/api/whatsapp/messages", requireAuth, requireRoles("admin", "doctor", "reception"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { conversationId, body } = req.body || {};
     const conv = data.whatsappConversations.find(c => c.id === conversationId);
     if (!conv) return res.status(404).json({ error: "Conversa nao encontrada." });
@@ -215,7 +215,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
       console.error(`[SECURITY] Webhook rejection: secret mismatch from ${req.ip}`);
       return res.status(401).json({ error: "Webhook não autorizado: secret inválido" });
     }
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const payload = (req.body || {}) as Record<string, unknown>;
     const connectionId = firstText(payload.connectionId, payload.sessionId, payload.deviceId) || data.whatsappConnections[0]?.id;
     const conn = data.whatsappConnections.find(c => c.id === connectionId);

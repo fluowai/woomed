@@ -42,7 +42,7 @@ export function registerPublicRoutes(app: Express) {
       const doctor = doctors.find(d => d.id === doctorId);
       if (!doctor) return res.status(404).json({ error: "Profissional nao encontrado." });
 
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const dateObj = new Date(String(date) + 'T00:00:00');
       const dayName = dayNames[dateObj.getDay()];
@@ -81,7 +81,7 @@ export function registerPublicRoutes(app: Express) {
         return res.status(400).json({ error: "doctorId, date, timeStart e patientName sao obrigatorios." });
       }
 
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       const doctors = await dataService.getDoctors();
       const doctor = doctors.find(d => d.id === doctorId);
       if (!doctor) return res.status(404).json({ error: "Profissional nao encontrado." });
@@ -145,7 +145,7 @@ export function registerPublicRoutes(app: Express) {
   // Check appointment by confirmation token
   app.get("/api/v2/public/appointments/:token", async (req, res) => {
     try {
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       const tokens = (data as any).publicAppointmentTokens || [];
       const found = tokens.find((t: any) => t.token === String(req.params.token).toUpperCase());
       if (!found) return res.status(404).json({ error: "Agendamento nao encontrado." });
@@ -164,7 +164,7 @@ export function registerPublicRoutes(app: Express) {
   // Cancel appointment by confirmation token
   app.post("/api/v2/public/appointments/:token/cancel", async (req, res) => {
     try {
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       const tokens = (data as any).publicAppointmentTokens || [];
       const found = tokens.find((t: any) => t.token === String(req.params.token).toUpperCase());
       if (!found) return res.status(404).json({ error: "Agendamento nao encontrado." });
@@ -188,7 +188,7 @@ export function registerPublicRoutes(app: Express) {
   app.get("/api/v2/portal/profile", async (req, res) => {
     const token = req.headers["x-portal-token"] as string;
     if (!token) return res.status(401).json({ error: "Token obrigatorio." });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });
@@ -208,7 +208,7 @@ export function registerPublicRoutes(app: Express) {
   app.get("/api/v2/portal/upcoming", async (req, res) => {
     const token = req.headers["x-portal-token"] as string;
     if (!token) return res.status(401).json({ error: "Token obrigatorio." });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });
@@ -225,7 +225,7 @@ export function registerPublicRoutes(app: Express) {
   app.get("/api/v2/portal/history", async (req, res) => {
     const token = req.headers["x-portal-token"] as string;
     if (!token) return res.status(401).json({ error: "Token obrigatorio." });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const portalTokens = data.patientPortalTokens || [];
     const found = portalTokens.find((t: any) => t.token === token && new Date(t.expiresAt) > new Date());
     if (!found) return res.status(401).json({ error: "Token invalido ou expirado." });

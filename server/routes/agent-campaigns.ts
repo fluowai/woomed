@@ -21,14 +21,14 @@ interface CampaignAgent {
 export function registerAgentCampaignRoutes(app: Express) {
   // List campaigns
   app.get("/api/v2/agent-campaigns", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const campaigns = (data as any).agentCampaigns || [];
     res.json({ campaigns });
   });
 
   // Create campaign
   app.post("/api/v2/agent-campaigns", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const { name, type, triggerDays, messageTemplate, channel, targetFilter } = req.body || {};
     if (!name || !type) return res.status(400).json({ error: "name e type sao obrigatorios" });
 
@@ -52,7 +52,7 @@ export function registerAgentCampaignRoutes(app: Express) {
 
   // Update campaign
   app.patch("/api/v2/agent-campaigns/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const campaigns: CampaignAgent[] = (data as any).agentCampaigns || [];
     const idx = campaigns.findIndex(c => c.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Campanha nao encontrada" });
@@ -68,7 +68,7 @@ export function registerAgentCampaignRoutes(app: Express) {
 
   // Delete campaign
   app.delete("/api/v2/agent-campaigns/:id", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const campaigns: CampaignAgent[] = (data as any).agentCampaigns || [];
     const idx = campaigns.findIndex(c => c.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Campanha nao encontrada" });
@@ -80,7 +80,7 @@ export function registerAgentCampaignRoutes(app: Express) {
 
   // Execute campaign - find target patients and send
   app.post("/api/v2/agent-campaigns/:id/execute", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const campaigns: CampaignAgent[] = (data as any).agentCampaigns || [];
     const campaign = campaigns.find(c => c.id === req.params.id);
     if (!campaign) return res.status(404).json({ error: "Campanha nao encontrada" });
@@ -158,7 +158,7 @@ export function registerAgentCampaignRoutes(app: Express) {
 
   // No-show auto-reminder: find appointments that are near and send reminder
   app.post("/api/v2/agent-campaigns/no-show-prevention", requireAuth, async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const now = new Date();
     const today = nowIso().slice(0, 10);
     const conn = data.whatsappConnections?.find(c => c.status === "connected");

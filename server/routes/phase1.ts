@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { Express } from "express";
 import { loadData, saveData } from "../data";
-import { AuthedRequest, sessions, requireAuth, requireRoles } from "../middleware";
+import { AuthedRequest, setSession, deleteSession, requireAuth, requireRoles } from "../middleware";
 import { audit } from "../helpers";
 import { hashPassword, verifyPassword, validatePassword, generateTokens, rotateRefreshToken, verifyToken, verifyRefreshToken, generateMFASecret, verifyMFAToken } from "../auth";
 import { createUser, updateUser, deleteUser, listUsers, generateInvite } from "../users";
@@ -31,7 +31,7 @@ async function findUserByEmail(email: string) {
   if (isSupabaseRestAvailable()) {
     return supabaseRestFindOne<DbUser>("users", `select=*&email=eq.${encodeURIComponent(email.trim().toLowerCase())}`);
   }
-  const data = await loadData();
+  const data = await loadData(req.user?.tenantId);
   return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 }
 
@@ -49,7 +49,7 @@ async function hasConfiguredSuperAdmin() {
     const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
     if (row) return true;
   }
-  const data = await loadData();
+  const data = await loadData(req.user?.tenantId);
   return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
 }
 
@@ -64,7 +64,7 @@ async function findUserById(id: string) {
   if (isSupabaseRestAvailable()) {
     return supabaseRestFindOne<DbUser>("users", `select=*&id=eq.${encodeURIComponent(id)}`);
   }
-  const data = await loadData();
+  const data = await loadData(req.user?.tenantId);
   return data.users.find(u => u.id === id);
 }
 
@@ -78,7 +78,7 @@ async function saveUserMfa(userId: string, mfaSecret: string, mfaEnabled: boolea
       await query("UPDATE users SET mfa_secret = $1, mfa_enabled = $2 WHERE id = $3", [mfaSecret, mfaEnabled, userId]);
     } catch { /* fallthrough */ }
   }
-  const data = await loadData();
+  const data = await loadData(req.user?.tenantId);
   const user = data.users.find(u => u.id === userId);
   if (user) {
     user.mfaSecret = mfaSecret;
@@ -93,7 +93,7 @@ async function saveUserPassword(userId: string, passwordHash: string) {
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
     } catch { /* fallthrough */ }
   }
-  const data = await loadData();
+  const data = await loadData(req.user?.tenantId);
   const user = data.users.find(u => u.id === userId);
   if (user) {
     user.passwordHash = passwordHash;
@@ -105,7 +105,7 @@ export function registerPhase1Routes(app: Express) {
   // === AUTH (JWT) ===
   app.post("/api/v2/auth/login", async (req, res) => {
     try {
-      const data = await loadData();
+      const data = await loadData(req.user?.tenantId);
       if (!(await hasConfiguredSuperAdmin())) {
         return res.status(400).json({ error: "Nenhum super admin configurado. Complete o setup primeiro.", code: "SETUP_REQUIRED" });
       }
@@ -139,7 +139,7 @@ export function registerPhase1Routes(app: Express) {
 
       if ((dbRow as any).mfa_enabled || (dbRow as any).mfaEnabled) {
         const mfaToken = randomUUID();
-        sessions.set(`mfa:${mfaToken}`, appUser);
+        setSession(`mfa:${mfaToken}`, appUser);
         return res.json({ mfaRequired: true, mfaToken, userId: (dbRow as any).id });
       }
 
@@ -158,14 +158,14 @@ export function registerPhase1Routes(app: Express) {
 
   app.post("/api/v2/auth/mfa/verify", async (req, res) => {
     const { mfaToken, userId, code } = req.body || {};
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const dbRow = await findUserById(userId);
     if (!dbRow || !(dbRow as any).mfa_secret) return res.status(401).json({ error: "MFA nao configurado." });
     if (!verifyMFAToken((dbRow as any).mfa_secret, code)) return res.status(401).json({ error: "Codigo MFA invalido." });
     const appUser = dbUserToApp(dbRow);
     const tokens = generateTokens(appUser);
     await audit(data, appUser, "login_mfa", "session", tokens.token, "Login com MFA");
-    sessions.delete(`mfa:${mfaToken}`);
+    deleteSession(`mfa:${mfaToken}`);
     res.json({ ...tokens, user: appUser });
   });
 
@@ -185,7 +185,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.post("/api/v2/auth/mfa/setup", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const dbRow = await findUserById(req.user!.id);
     if (!dbRow) return res.status(404).json({ error: "Usuario nao encontrado." });
     const userEmail = (dbRow as any).email || req.user!.name;
@@ -196,7 +196,7 @@ export function registerPhase1Routes(app: Express) {
 
   app.post("/api/v2/auth/mfa/enable", requireAuth, async (req: AuthedRequest, res) => {
     const { code } = req.body || {};
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const dbRow = await findUserById(req.user!.id);
     if (!dbRow || !(dbRow as any).mfa_secret) return res.status(400).json({ error: "Configure o MFA primeiro." });
     if (!verifyMFAToken((dbRow as any).mfa_secret, code)) return res.status(401).json({ error: "Codigo invalido." });
@@ -210,7 +210,7 @@ export function registerPhase1Routes(app: Express) {
     if (!currentPassword || !newPassword) return res.status(400).json({ error: "Senha atual e nova senha obrigatorias." });
     const passwordError = validatePassword(newPassword);
     if (passwordError) return res.status(400).json({ error: passwordError });
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const dbRow = await findUserById(req.user!.id);
     if (!dbRow) return res.status(404).json({ error: "Usuario nao encontrado." });
     const passwordHash = (dbRow as any).password_hash;
@@ -267,13 +267,13 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.get("/api/v2/lgpd/consent/:patientId", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const consents = getPatientConsents(data, req.params.patientId);
     res.json(consents);
   });
 
   app.get("/api/v2/lgpd/consent-version/:patientId", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const patient = data.patients.find(p => p.id === req.params.patientId);
     if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
     const latestTemplate = (data.lgpdConsentTemplates || [])
@@ -291,7 +291,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.post("/api/v2/lgpd/consent-renew/:patientId", requireAuth, async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const idx = data.patients.findIndex(p => p.id === req.params.patientId);
     if (idx === -1) return res.status(404).json({ error: "Paciente nao encontrado." });
     const latestTemplate = (data.lgpdConsentTemplates || [])
@@ -306,7 +306,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.get("/api/v2/lgpd/patients-needing-renewal", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const latestTemplate = (data.lgpdConsentTemplates || [])
       .filter(t => t.isActive)
       .sort((a, b) => b.version - a.version)[0];
@@ -322,7 +322,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.post("/api/v2/lgpd/retention/run", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const retentionYears = Math.max(1, parseInt(String(req.body?.years || "5"), 10));
     const cutoff = new Date();
     cutoff.setFullYear(cutoff.getFullYear() - retentionYears);
@@ -349,7 +349,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.get("/api/v2/lgpd/retention/estimate", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     const years = Math.max(1, parseInt(String(req.query.years || "5"), 10));
     const cutoff = new Date();
     cutoff.setFullYear(cutoff.getFullYear() - years);
@@ -362,13 +362,57 @@ export function registerPhase1Routes(app: Express) {
     res.json({ candidateCount, retentionYears: years, totalPatients: data.patients.length });
   });
 
+  // === LGPD DATA SUBJECT RIGHTS ===
+  app.get("/api/v2/lgpd/subject-access/:patientId", requireAuth, async (req: AuthedRequest, res) => {
+    const data = await loadData(req.user?.tenantId);
+    const patient = data.patients.find(p => p.id === req.params.patientId);
+    if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
+    const patientNameUpper = patient.fullName.toUpperCase();
+    const records = data.medicalRecords[patient.id] || { entries: [] };
+    const appointments = data.appointments.filter(a => a.patientName.toUpperCase() === patientNameUpper);
+    const finances = data.financeTransactions.filter(t => appointments.some(a => a.id === t.appointmentId));
+    const consents = getPatientConsents(data, patient.id);
+    const auditLogs = data.auditEvents.filter(e => e.entityId === patient.id);
+    res.json({
+      personalData: { fullName: patient.fullName, birthDate: patient.birthDate, cpf: patient.cpf, phone: patient.phone, email: patient.email, address: patient.address },
+      medicalRecords: records,
+      appointments: appointments.map(a => ({ date: a.date, time: a.timeStart, doctor: a.type, status: a.status })),
+      financialData: finances.map(f => ({ description: f.description, value: f.value, date: f.date })),
+      consents,
+      auditTrail: auditLogs.map(l => ({ action: l.action, date: l.createdAt, details: l.details })),
+      exportedAt: new Date().toISOString()
+    });
+  });
+
+  app.post("/api/v2/lgpd/subject-deletion/:patientId", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData(req.user?.tenantId);
+    const patient = data.patients.find(p => p.id === req.params.patientId);
+    if (!patient) return res.status(404).json({ error: "Paciente nao encontrado." });
+    const patientNameUpper = patient.fullName.toUpperCase();
+    await audit(data, req.user!, "lgpd_deletion_request", "patient", patient.id, `Delecao solicitada para ${patient.fullName}`);
+    data.patients = data.patients.filter(p => p.id !== patient.id);
+    delete data.medicalRecords[patient.id];
+    data.appointments = data.appointments.filter(a => a.patientName.toUpperCase() !== patientNameUpper);
+    data.financeTransactions = data.financeTransactions.filter(t => !data.appointments.some(a => a.id === t.appointmentId));
+    data.patientDocuments = (data.patientDocuments || []).filter(d => d.patientId !== patient.id);
+    data.lgpdPatientConsents = (data.lgpdPatientConsents || []).filter(c => c.patientId !== patient.id);
+    await saveData(data);
+    res.json({ ok: true, message: "Dados do paciente removidos conforme LGPD." });
+  });
+
+  app.get("/api/v2/lgpd/data-subject-requests", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+    const data = await loadData(req.user?.tenantId);
+    const requests = (data as any).lgpdDataSubjectRequests || [];
+    res.json(requests);
+  });
+
   // === BACKUP ===
   app.post("/api/v2/backup", requireAuth, requireRoles("admin"), async (_req, res) => {
     try {
-      const backupPath = await createBackup();
-      res.json({ path: backupPath, message: "Backup criado com sucesso." });
+      const result = await createBackup();
+      res.json({ path: result.path, verified: result.verified, message: "Backup criado com sucesso." });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: "Erro ao criar backup." });
     }
   });
 
@@ -391,7 +435,7 @@ export function registerPhase1Routes(app: Express) {
   });
 
   app.get("/api/auth/users", requireAuth, requireRoles("admin"), async (_req, res) => {
-    const data = await loadData();
+    const data = await loadData(req.user?.tenantId);
     res.json(data.users.map(u => ({ id: u.id, name: u.name, role: u.role, specialty: u.specialty })));
   });
 }

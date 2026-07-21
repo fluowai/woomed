@@ -24,7 +24,24 @@ const JWT_SECRET_FALLBACK = getSecret("JWT_SECRET_SECONDARY") || null;
 
 const JWT_EXPIRES_IN = "24h";
 const REFRESH_EXPIRES_IN = "7d";
-const usedRefreshTokens = new Set<string>();
+
+interface RefreshTokenEntry {
+  expiresAt: number;
+}
+const usedRefreshTokens = new Map<string, RefreshTokenEntry>();
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+let lastRefreshCleanup = Date.now();
+
+function cleanupUsedRefreshTokens() {
+  const now = Date.now();
+  if (now - lastRefreshCleanup < 60 * 60 * 1000) return;
+  lastRefreshCleanup = now;
+  for (const [jti, entry] of usedRefreshTokens) {
+    if (entry.expiresAt <= now) {
+      usedRefreshTokens.delete(jti);
+    }
+  }
+}
 
 export interface AuthTokens {
   token: string;
@@ -85,8 +102,9 @@ export function rotateRefreshToken(oldRefreshToken: string): string | null {
   try {
     const payload = jwt.verify(oldRefreshToken, JWT_SECRET) as { id: string; type: string; jti: string };
     if (payload.type !== "refresh") return null;
+    cleanupUsedRefreshTokens();
     if (usedRefreshTokens.has(payload.jti)) return null;
-    usedRefreshTokens.add(payload.jti);
+    usedRefreshTokens.set(payload.jti, { expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS });
     const newJti = crypto.randomUUID();
     return jwt.sign({ id: payload.id, type: "refresh", jti: newJti }, JWT_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
   } catch {

@@ -286,40 +286,6 @@ export interface NeuralKnowledgeItem {
 
 export interface MarketingCampaign {
   id: string;
-  name: string;
-  audience: string;
-  channel: ChannelType | 'sms';
-  status: 'draft' | 'scheduled' | 'running' | 'finished';
-  goal: string;
-  scheduledDate: string;
-  budget: number;
-  leads: number;
-}
-
-export interface TissGuide {
-  id: string;
-  patientName: string;
-  operator: string;
-  procedure: string;
-  status: 'draft' | 'authorized' | 'submitted' | 'glosa' | 'paid';
-  value: number;
-  createdAt: string;
-}
-
-export interface InventoryItem {
-  id: string;
-  name: string;
-  category: string;
-  quantity: number;
-  minQuantity: number;
-  unit: string;
-  expiresAt: string;
-  supplier: string;
-}
-
-export interface ReferralRecord {
-  id: string;
-  patientName: string;
   referredName: string;
   status: 'invited' | 'scheduled' | 'converted' | 'rewarded';
   reward: string;

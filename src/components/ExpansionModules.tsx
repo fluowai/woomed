@@ -573,16 +573,71 @@ export function MarketingModule({ campaigns, agents, onCreateCampaign, onUpdateC
 }
 
 export function TissModule({ guides, appointments, onCreateGuide, onUpdateGuide }: { guides: TissGuide[]; appointments: Appointment[]; onCreateGuide: (guide: Omit<TissGuide, 'id' | 'createdAt' | 'status'>) => void; onUpdateGuide: (id: string, patch: Partial<TissGuide>) => void }) {
+  const [operator, setOperator] = useState('Unimed');
+  const [operatorAns, setOperatorAns] = useState('321235');
+  const [tussCode, setTussCode] = useState('10101012');
+  const [healthPlanNumber, setHealthPlanNumber] = useState('');
+  
   const convenioAppointments = appointments.filter(item => item.type.toLowerCase().includes('conven'));
   const total = guides.reduce((acc, guide) => acc + guide.value, 0);
+
+  const generateBatch = () => {
+    // Simulacao de geracao de lote (XML TISS seria salvo ou exportado via rota /api/tiss/batch)
+    const pendingGuides = guides.filter(g => g.status === 'authorized');
+    if (pendingGuides.length === 0) {
+      alert('Nenhuma guia autorizada para gerar o lote.');
+      return;
+    }
+    const token = localStorage.getItem('consultio_token');
+    fetch('/api/tiss/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ operatorAns })
+    }).then(res => res.blob()).then(blob => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lote_tiss_${operatorAns}.xml`;
+      a.click();
+    }).catch(() => alert('Funcionalidade XML ativada no backend. Certifique-se de expor a rota.'));
+  };
+
   return (
-    <Shell title="TISS" subtitle="Gestao de guias, autorizacoes, envio e acompanhamento de glosas." icon={<FileText size={24} />} aside={<div className="text-xs font-black text-blue-700 bg-blue-50 px-4 py-2 rounded-full">R$ {total.toFixed(2)} em guias</div>}>
+    <Shell 
+      title="Faturamento TISS" 
+      subtitle="Padrao ABRASF/ANS. Gestao de guias, faturamento de convênios, tabelas TUSS e envio de Lote XML." 
+      icon={<FileText size={24} />} 
+      aside={
+        <div className="flex gap-2">
+          <button onClick={generateBatch} className="bg-slate-900 text-white rounded-full px-4 py-2 text-xs font-black uppercase shadow-sm hover:bg-slate-800">Gerar Lote XML (Envio ANS)</button>
+          <div className="text-xs font-black text-blue-700 bg-blue-50 px-4 py-2 rounded-full flex items-center">Faturado: R$ {total.toFixed(2)}</div>
+        </div>
+      }
+    >
       <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-8">
         <div className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm h-fit">
-          <h3 className="font-black text-slate-900 mb-4">Gerar guia rapida</h3>
+          <h3 className="font-black text-slate-900 mb-4">Gerar Guia Padrão (TUSS)</h3>
+          <div className="space-y-4 mb-6">
+             <SelectInput label="Operadora (Convênio)" value={operator} onChange={setOperator} options={[{value: 'Unimed', label: 'Unimed (Brasília)'}, {value: 'Bradesco', label: 'Bradesco Saúde'}, {value: 'Amil', label: 'Amil'}]} />
+             <TextInput label="Registro ANS da Operadora" value={operatorAns} onChange={setOperatorAns} />
+             <TextInput label="Código TUSS (Procedimento)" value={tussCode} onChange={setTussCode} />
+             <TextInput label="Carteirinha do Paciente" value={healthPlanNumber} onChange={setHealthPlanNumber} placeholder="Ex: 00123992283" />
+          </div>
+          <h3 className="font-black text-slate-900 mb-4">Selecionar da Agenda</h3>
           <div className="space-y-3">
             {convenioAppointments.map(apt => (
-              <button key={apt.id} onClick={() => onCreateGuide({ patientName: apt.patientName, operator: 'Operadora', procedure: apt.type, value: 150 })} className="w-full text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-2xl p-4">
+              <button key={apt.id} onClick={() => onCreateGuide({ 
+                  patientName: apt.patientName, 
+                  operator: operator, 
+                  operatorRegisterAns: operatorAns,
+                  procedure: apt.type, 
+                  tussCode: tussCode,
+                  healthPlanNumber: healthPlanNumber,
+                  guideType: 'consulta',
+                  doctorCrm: '12345',
+                  doctorCbo: '2251',
+                  value: 150 
+                })} className="w-full text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-2xl p-4">
                 <span className="block text-xs font-black text-slate-900">{apt.patientName}</span>
                 <span className="block text-[10px] font-bold text-slate-400">{apt.date} {apt.timeStart} / {apt.type}</span>
               </button>
@@ -592,17 +647,21 @@ export function TissModule({ guides, appointments, onCreateGuide, onUpdateGuide 
         <div className="bg-white border border-slate-200 rounded-[28px] shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-400 uppercase tracking-widest font-black">
-              <tr><th className="p-4">Paciente</th><th>Operadora</th><th>Procedimento</th><th>Valor</th><th>Status</th><th></th></tr>
+              <tr><th className="p-4">Paciente</th><th>Convênio</th><th>TUSS</th><th>Valor</th><th>Status</th><th>Ações</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {guides.map(guide => (
                 <tr key={guide.id}>
-                  <td className="p-4 font-black text-slate-800">{guide.patientName}</td>
+                  <td className="p-4 font-black text-slate-800">{guide.patientName} <span className="block text-[10px] text-slate-400">{guide.healthPlanNumber || 'Sem cart.'}</span></td>
                   <td>{guide.operator}</td>
-                  <td>{guide.procedure}</td>
+                  <td><span className="bg-slate-100 px-2 py-1 rounded text-slate-500 font-black">{guide.tussCode || 'S/ TUSS'}</span></td>
                   <td className="font-black">R$ {guide.value.toFixed(2)}</td>
                   <td><span className={`px-2 py-1 rounded-full font-black ${statusClass(guide.status)}`}>{guide.status}</span></td>
-                  <td><button onClick={() => onUpdateGuide(guide.id, { status: guide.status === 'submitted' ? 'paid' : 'submitted' })} className="px-3 py-1 bg-blue-600 text-white rounded-lg font-black">Avancar</button></td>
+                  <td>
+                    {guide.status === 'draft' && <button onClick={() => onUpdateGuide(guide.id, { status: 'authorized' })} className="px-3 py-1 bg-green-500 text-white rounded-lg font-black">Autorizar</button>}
+                    {guide.status === 'authorized' && <span className="text-[10px] font-bold text-slate-400">Aguardando Lote XML</span>}
+                    {guide.status === 'submitted' && <button onClick={() => onUpdateGuide(guide.id, { status: 'paid' })} className="px-3 py-1 bg-blue-600 text-white rounded-lg font-black">Baixar Pgto</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -203,7 +203,16 @@ export function defaultData(): AppData {
   };
 }
 
-export async function loadData(): Promise<AppData> {
+export async function loadData(tenantId?: string): Promise<AppData> {
+  if (isDatabaseAvailable()) {
+    const { dataService } = await import("./data-service");
+    const fullState = await dataService.loadFullState(tenantId);
+    if (fullState) return fullState;
+    if (process.env.NODE_ENV === "production") {
+      console.warn("[DATA] DB available but loadFullState returned null. Initializing with defaults.");
+      return defaultData();
+    }
+  }
   if (cachedData) return cachedData;
 
   try {
@@ -273,6 +282,9 @@ export async function loadData(): Promise<AppData> {
 }
 
 export async function saveData(data: AppData) {
+  if (isDatabaseAvailable() && process.env.NODE_ENV === "production") {
+    return;
+  }
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(dataFile, JSON.stringify(data, null, 2), "utf-8");
 }

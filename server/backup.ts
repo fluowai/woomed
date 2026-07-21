@@ -38,10 +38,9 @@ function formatDate(date: Date): string {
   return `${yyyy}-${mm}-${dd}_${hh}-${min}`;
 }
 
-export async function createBackup(): Promise<string> {
+export async function createBackup(): Promise<{ path: string; verified: boolean }> {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   const data = await loadData();
-  // Strip volatile runtime state from backups
   const sanitized = { ...data };
   delete (sanitized as any).__agentRuntime;
   const encryptionKey = getBackupEncryptionKey();
@@ -50,8 +49,19 @@ export async function createBackup(): Promise<string> {
   const plaintext = Buffer.from(JSON.stringify(sanitized), "utf-8");
   const encrypted = encryptBuffer(plaintext, encryptionKey);
   await fs.writeFile(backupPath, encrypted);
+
+  let verified = false;
+  try {
+    const readBack = await fs.readFile(backupPath);
+    const decrypted = decryptBuffer(readBack, encryptionKey);
+    JSON.parse(decrypted.toString("utf-8"));
+    verified = true;
+  } catch {
+    console.error("[Backup] Verification failed for", backupName);
+  }
+
   await cleanOldBackups();
-  return backupPath;
+  return { path: backupPath, verified };
 }
 
 async function cleanOldBackups(): Promise<void> {
@@ -102,8 +112,12 @@ export async function scheduleAutoBackup(): Promise<void> {
 
   const runBackup = async () => {
     try {
-      await createBackup();
-      console.log(`[Backup] Auto backup created at ${new Date().toISOString()}`);
+      const result = await createBackup();
+      if (result.verified) {
+        console.log(`[Backup] Verified backup created at ${new Date().toISOString()}`);
+      } else {
+        console.error("[Backup] Backup created but verification FAILED at", new Date().toISOString());
+      }
     } catch (error) {
       console.error("[Backup] Auto backup failed:", error instanceof Error ? error.message : error);
     }
