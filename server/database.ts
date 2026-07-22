@@ -73,7 +73,13 @@ const CORE_SCHEMA_SQL = `
 
 function getPool(): Pool {
   if (!pool) {
-    pool = new Pool({ connectionString: DATABASE_URL });
+    const isSSL = DATABASE_URL.includes("supabase.co") || process.env.NODE_ENV === "production";
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 10000,
+      ...(isSSL ? { ssl: { rejectUnauthorized: false } } : {})
+    });
   }
   return pool;
 }

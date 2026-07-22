@@ -22,14 +22,19 @@ function publicUser(user: AppUser) {
 }
 
 export function registerOnboardingRoutes(app: Express) {
-  app.get("/api/v2/onboarding/plans", async (_req, res) => {
-    const data = await loadData(req.user?.tenantId);
-    const plans = mergeDefaultPlans(data.plans).filter(plan => plan.isActive);
-    res.json({ plans });
+  app.get("/api/v2/onboarding/plans", async (req: any, res) => {
+    try {
+      const data = await loadData(req.user?.tenantId);
+      const plans = mergeDefaultPlans(data.plans).filter(plan => plan.isActive);
+      res.json({ plans });
+    } catch (error) {
+      res.status(500).json({ error: "Erro ao carregar planos." });
+    }
   });
 
   app.post("/api/v2/onboarding/clinic", async (req, res) => {
-    const data = await loadData(req.user?.tenantId);
+    try {
+      const data = await loadData(req.user?.tenantId);
     data.plans = mergeDefaultPlans(data.plans);
 
     const {
@@ -232,5 +237,9 @@ export function registerOnboardingRoutes(app: Express) {
         currentPlan: selectedPlan ? { id: selectedPlan.id, code: selectedPlan.code, name: selectedPlan.name } : undefined
       }
     });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Erro desconhecido";
+      res.status(500).json({ error: `Erro ao criar clinica: ${detail}` });
+    }
   });
 }

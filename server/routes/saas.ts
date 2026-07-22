@@ -11,7 +11,7 @@ export function registerSaaSRoutes(app: Express) {
 
   // ==================== TENANTS ====================
 
-  app.get("/api/v2/saas/tenants", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
+  app.get("/api/v2/saas/tenants", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     res.json({ tenants: data.tenants.sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
   });
@@ -91,7 +91,7 @@ export function registerSaaSRoutes(app: Express) {
 
   // ==================== PLANS ====================
 
-  app.get("/api/v2/saas/plans", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
+  app.get("/api/v2/saas/plans", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     res.json({ plans: data.plans.sort((a, b) => a.sortOrder - b.sortOrder) });
   });
@@ -150,7 +150,7 @@ export function registerSaaSRoutes(app: Express) {
 
   // ==================== DASHBOARD STATS ====================
 
-  app.get("/api/v2/saas/stats", requireAuth, requireRoles("super_admin"), async (_req: AuthedRequest, res) => {
+  app.get("/api/v2/saas/stats", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     const activeTenants = data.tenants.filter(t => t.status === "active");
     const trialingTenants = data.tenants.filter(t => t.status === "trialing");

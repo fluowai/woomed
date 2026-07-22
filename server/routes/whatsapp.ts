@@ -37,7 +37,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
     socket.on("error", () => whatsappSockets.delete(socket));
   });
 
-  app.get("/api/whatsapp/connections", requireAuth, async (_req, res) => {
+  app.get("/api/whatsapp/connections", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     res.json({ connections: data.whatsappConnections.map(sanitizeConnection) });
   });

@@ -35,7 +35,11 @@ const setupLimiter = rateLimit({
 
 export function registerSetupRoutes(app: Express) {
   app.get("/api/v2/setup/status", async (_req, res) => {
-    res.json({ needsSetup: !(await hasConfiguredSuperAdmin()) });
+    try {
+      res.json({ needsSetup: !(await hasConfiguredSuperAdmin()) });
+    } catch (error) {
+      res.status(500).json({ error: "Erro ao verificar status de setup." });
+    }
   });
 
   app.post("/api/v2/setup/reset", requireAuth, requireRoles("super_admin"), async (req: AuthedRequest, res) => {

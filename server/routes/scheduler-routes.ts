@@ -52,7 +52,7 @@ export function registerSchedulerRoutes(app: Express) {
     res.json({ ok: true, message: "Follow-up check executado" });
   });
 
-  app.get("/api/v2/followup/queue", requireAuth, async (_req, res) => {
+  app.get("/api/v2/followup/queue", requireAuth, async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     const fu = (data as any).__followUp || { entries: [] };
     const rt = (data as any).__agentRuntime || { sessions: [], leads: [] };
@@ -82,7 +82,7 @@ export function registerSchedulerRoutes(app: Express) {
     res.json({ ok: true, message: "Follow-up registrado manualmente" });
   });
 
-  app.post("/api/v2/followup/process-now", requireAuth, requireRoles("admin"), async (_req, res) => {
+  app.post("/api/v2/followup/process-now", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
     await findAbandonedSessions();
     await checkFollowUps();
     const data = await loadData(req.user?.tenantId);
