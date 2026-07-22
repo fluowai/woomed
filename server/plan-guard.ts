@@ -27,27 +27,55 @@ export function featureGuard(feature: string) {
   };
 }
 
-export async function requireLimit(entity: "users" | "patients" | "doctors", req: AuthedRequest, res: Response, next: NextFunction) {
+export type GuardEntity = "users" | "patients" | "doctors" | "agents" | "whatsapp_connections";
+
+export async function requireLimit(entity: GuardEntity, req: AuthedRequest, res: Response, next: NextFunction) {
   if (!req.user?.tenantId) return next();
   const data = await loadData();
   const plan = resolveTenantPlan(data, req.user.tenantId);
-  const limit = Number(plan?.limits?.[entity] || 0);
+  const limitKey = entity;
+  const limit = Number(plan?.limits?.[limitKey] || 0);
   if (!limit) return next();
+  
   const users = Array.isArray(data?.users) ? data.users : [];
   const patients = Array.isArray(data?.patients) ? data.patients : [];
   const doctors = Array.isArray(data?.doctors) ? data.doctors : [];
-  const count = entity === "users"
-    ? users.filter(user => user.tenantId === req.user!.tenantId).length
-    : entity === "patients"
-      ? patients.filter(patient => (patient as any).tenantId === req.user!.tenantId).length
-      : doctors.filter(doctor => (doctor as any).tenantId === req.user!.tenantId).length;
+  const serviceAgents = Array.isArray(data?.serviceAgents) ? data.serviceAgents : [];
+  const whatsappConnections = Array.isArray(data?.whatsappConnections) ? data.whatsappConnections : [];
+
+  let count = 0;
+  if (entity === "users") {
+    count = users.filter(user => user.tenantId === req.user!.tenantId).length;
+  } else if (entity === "patients") {
+    count = patients.filter(patient => (patient as any).tenantId === req.user!.tenantId).length;
+  } else if (entity === "doctors") {
+    count = doctors.filter(doctor => (doctor as any).tenantId === req.user!.tenantId).length;
+  } else if (entity === "agents") {
+    count = serviceAgents.filter(agent => (agent as any).tenantId === req.user!.tenantId).length;
+  } else if (entity === "whatsapp_connections") {
+    count = whatsappConnections.filter(conn => (conn as any).tenantId === req.user!.tenantId).length;
+  }
+
   if (count >= limit) {
-    return res.status(402).json({ error: "Limite do plano atingido.", code: "PLAN_LIMIT_REACHED", entity, limit });
+    const labels: Record<GuardEntity, string> = {
+      users: "usuários de sistema",
+      patients: "pacientes",
+      doctors: "médicos/profissionais",
+      agents: "agentes de IA",
+      whatsapp_connections: "conexões de WhatsApp"
+    };
+    return res.status(402).json({
+      error: `Limite do plano atingido para ${labels[entity] || entity}. (Limite: ${limit})`,
+      code: "PLAN_LIMIT_REACHED",
+      entity,
+      limit,
+      current: count
+    });
   }
   next();
 }
 
-export function limitGuard(entity: "users" | "patients" | "doctors") {
+export function limitGuard(entity: GuardEntity) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     requireLimit(entity, req, res, next).catch(next);
   };

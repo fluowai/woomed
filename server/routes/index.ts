@@ -293,7 +293,7 @@ export function registerRoutes(app: Express) {
   });
 
   // AGENTS
-  app.post("/api/agents", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), async (req: AuthedRequest, res) => {
+  app.post("/api/agents", requireAuth, requireRoles("admin", "reception"), featureGuard("ai"), limitGuard("agents"), async (req: AuthedRequest, res) => {
     const parsed = agentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; ") });
     const fields = parsed.data;

@@ -101,12 +101,16 @@ const featureByView: Record<string, string> = {
   'NPS & LGPD': 'nps_lgpd',
   'Central de Agentes': 'ai',
   'Assistente IA': 'ai',
-  LLMs: 'ai',
-  Neural: 'ai',
+  LLMs: 'llms',
+  Neural: 'neural',
   'Pipeline Agentes': 'ai',
   'Pipeline SDR': 'ai',
   'Métricas Agentes': 'ai',
   'Follow-ups': 'ai',
+  'Consulta Interativa': 'consulta_interativa',
+  'Materiais de Referência': 'referencias',
+  'Ajuda': 'ajuda',
+  'Indique e Ganhe': 'indique_ganhe',
 };
 
 export default function Sidebar({ activeView, onViewChange, onNewAppointment, userRole, userTenantId, activeSaasSection = 'overview', onSaasSectionChange, planFeatures = {} }: SidebarProps) {
@@ -120,11 +124,7 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
   const navItems = isPlatformAdmin
     ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType, superAdminOnly: true }]
     : allNavItems()
-        .filter(item => !item.superAdminOnly || userRole === 'super_admin')
-        .filter(item => {
-          const feature = featureByView[item.view as string];
-          return !feature || planFeatures[feature] !== false;
-        });
+        .filter(item => !item.superAdminOnly || userRole === 'super_admin');
   const mobileMainNavItems = isPlatformAdmin
     ? [{ icon: Building2, label: 'Painel SaaS', view: 'Painel SaaS' as ViewType }]
     : mainNavItems;
@@ -152,7 +152,10 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
           <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
             <Stethoscope className="text-white w-6 h-6" />
           </div>
-          <span className="text-xl font-bold text-teal-900 tracking-tight">Consultio Med</span>
+          <div className="flex flex-col">
+            <span className="text-xl font-black text-teal-900 tracking-tight leading-none">Woomed</span>
+            <span className="text-[10px] font-bold text-teal-600 tracking-widest uppercase mt-0.5">by Wootech</span>
+          </div>
         </div>
 
         {!isPlatformAdmin && (
@@ -168,25 +171,41 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
         )}
 
         <nav className="flex-1 px-4 space-y-1 pb-10">
-          {navItems.map((item) => (
-            <div key={item.label}>
-              <motion.button
-                onClick={() => onViewChange(item.view)}
-                whileHover={{ x: 4 }}
-                className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
-                  activeView === item.view
-                    ? 'text-teal-700 bg-teal-50 font-bold'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                }`}
-              >
-                <item.icon size={20} className={activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
-                <span className="text-sm font-medium">{item.label}</span>
-                {item.view === 'Follow-ups' && pendingFollowUps > 0 && (
-                  <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {pendingFollowUps > 99 ? '99+' : pendingFollowUps}
-                  </span>
-                )}
-              </motion.button>
+          {navItems.map((item) => {
+            const featureKey = featureByView[item.view as string];
+            const isDisabled = Boolean(featureKey && planFeatures[featureKey] === false);
+            return (
+              <div key={item.label}>
+                <motion.button
+                  onClick={() => {
+                    if (isDisabled) {
+                      import('./Toast').then(m => m.showToast('info', `O módulo "${item.label}" não está incluso no seu plano atual. Solicite o upgrade ao Super Admin!`));
+                      return;
+                    }
+                    onViewChange(item.view);
+                  }}
+                  whileHover={{ x: 4 }}
+                  className={`flex items-center w-full gap-3 px-4 py-3 rounded-xl transition-colors ${
+                    isDisabled
+                      ? 'opacity-60 cursor-not-allowed bg-slate-50/50 text-slate-400'
+                      : activeView === item.view
+                        ? 'text-teal-700 bg-teal-50 font-bold'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <item.icon size={20} className={isDisabled ? 'text-slate-300' : activeView === item.view ? 'text-teal-600' : 'text-slate-400'} />
+                  <span className="text-sm font-medium">{item.label}</span>
+                  {isDisabled && (
+                    <span className="ml-auto bg-amber-100 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md flex items-center gap-1 border border-amber-200">
+                      <Shield size={10} /> Upgrade
+                    </span>
+                  )}
+                  {!isDisabled && item.view === 'Follow-ups' && pendingFollowUps > 0 && (
+                    <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                      {pendingFollowUps > 99 ? '99+' : pendingFollowUps}
+                    </span>
+                  )}
+                </motion.button>
 
               {isPlatformAdmin && item.view === 'Painel SaaS' && (
                 <div className="mt-2 ml-5 pl-3 border-l border-teal-100 space-y-1">
@@ -214,7 +233,8 @@ export default function Sidebar({ activeView, onViewChange, onNewAppointment, us
                 </div>
               )}
             </div>
-          ))}
+          );
+        })}
         </nav>
       </aside>
 

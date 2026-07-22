@@ -57,9 +57,6 @@ export function registerOnboardingRoutes(app: Express) {
     if (passwordError) return res.status(400).json({ error: passwordError });
 
     const normalizedEmail = String(ownerEmail).trim().toLowerCase();
-    if (isDatabaseAvailable()) {
-      await ensureCoreAuthSchema();
-    }
     if (data.users.some(user => user.email?.toLowerCase() === normalizedEmail)) {
       return res.status(409).json({ error: "Ja existe um usuario com este email." });
     }

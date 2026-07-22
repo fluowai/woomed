@@ -159,65 +159,6 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
     try {
       await apiDelete(`/api/v2/saas/tenants/${id}`, token);
       showToast('success', `Clinica ${name} removida.`);
-      onRefresh();
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Erro ao remover clinica.');
-    }
-  };
-
-  // Plan CRUD
-  const openCreatePlan = () => {
-    setEditingPlan(null);
-    setPlanForm({ code: '', name: '', description: '', priceCents: 0, currency: 'BRL', billingInterval: 'month', users: 1, patients: 100, whatsapp: false, ai: false });
-    setShowPlanModal(true);
-  };
-
-  const openEditPlan = (plan: SaaSPlan) => {
-    setEditingPlan(plan);
-    setPlanForm({
-      code: plan.code,
-      name: plan.name,
-      description: plan.description,
-      priceCents: plan.priceCents,
-      currency: plan.currency,
-      billingInterval: plan.billingInterval,
-      users: plan.limits.users || 1,
-      patients: plan.limits.patients || 100,
-      whatsapp: Boolean(plan.features.whatsapp),
-      ai: Boolean(plan.features.ai)
-    });
-    setShowPlanModal(true);
-  };
-
-  const savePlan = async () => {
-    try {
-      const body = {
-        code: planForm.code,
-        name: planForm.name,
-        description: planForm.description,
-        priceCents: planForm.priceCents,
-        currency: planForm.currency,
-        billingInterval: planForm.billingInterval,
-        limits: { users: planForm.users, patients: planForm.patients },
-        features: { whatsapp: planForm.whatsapp, ai: planForm.ai }
-      };
-      if (editingPlan) {
-        await apiPatch(`/api/v2/saas/plans/${editingPlan.id}`, token, body);
-        showToast('success', `Plano ${planForm.name} atualizado.`);
-      } else {
-        await apiPost('/api/v2/saas/plans', token, body);
-        showToast('success', `Plano ${planForm.name} criado!`);
-      }
-      setShowPlanModal(false);
-      onRefresh();
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Erro ao salvar plano.');
-    }
-  };
-
-  const togglePlanActive = async (plan: SaaSPlan) => {
-    try {
-      await apiPatch(`/api/v2/saas/plans/${plan.id}`, token, { isActive: !plan.isActive });
       showToast('success', `Plano ${plan.isActive ? 'desativado' : 'ativado'}.`);
       onRefresh();
     } catch (err) {
@@ -527,6 +468,8 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
                   <p className="text-slate-500 text-sm mb-4">As clínicas usam o subdomínio <code className="text-teal-700 bg-teal-50 px-2 py-0.5 rounded">{'{slug}'}.woomed.app</code></p>
                 </div>
                 <div className="pb-6 border-b border-white/5">
+                </div>
+                <div className="pb-6 border-b border-white/5">
                   <h4 className="text-slate-900 font-medium mb-2 flex items-center gap-2"><UserCog size={18} className="text-teal-600" /> Usuário Master</h4>
                   <p className="text-slate-500 text-sm mb-4">Você está logado como <strong className="text-slate-900">Super Administrador</strong>. Todos os recursos SaaS estão disponíveis.</p>
                 </div>
@@ -633,85 +576,160 @@ export default function SaaSAdmin({ token, tenants, plans, onRefresh, onAccessTe
       {showPlanModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => setShowPlanModal(false)}>
-          <div onClick={e => e.stopPropagation()} className="bg-white border border-teal-100 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+          <div onClick={e => e.stopPropagation()} className="bg-white border border-teal-100 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <CreditCard className="text-teal-600" size={22} />
-                <h3 className="text-lg font-bold text-slate-900">{editingPlan ? 'Editar Plano' : 'Novo Plano'}</h3>
+                <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">{editingPlan ? 'Editar Plano' : 'Novo Plano'}</h3>
+                  <p className="text-xs text-slate-500 font-medium">Configure permissões de módulos e limites de uso.</p>
+                </div>
               </div>
-              <button onClick={() => setShowPlanModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setShowPlanModal(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={18} />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Código</label>
-                  <input value={planForm.code} onChange={e => setPlanForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400"
-                    placeholder="BASIC" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Nome</label>
-                  <input value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400"
-                    placeholder="Básico" />
-                </div>
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Descrição</label>
-                  <input value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400"
-                    placeholder="Plano ideal para pequenas clinicas" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Preço (centavos)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">R$</span>
-                    <input type="number" value={planForm.priceCents / 100} onChange={e => setPlanForm(f => ({ ...f, priceCents: Math.round(Number(e.target.value) * 100) }))}
-                      className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-teal-500" />
+
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Informações Básicas */}
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Informações Principais</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Código</label>
+                    <input value={planForm.code} onChange={e => setPlanForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400 font-mono"
+                      placeholder="BASIC" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Nome do Plano</label>
+                    <input value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400 font-bold"
+                      placeholder="Plano Básico" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Descrição Explicativa</label>
+                    <input value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 placeholder:text-slate-400"
+                      placeholder="Ideal para pequenas clínicas e consultórios iniciarem." />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Preço Mensal (R$)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">R$</span>
+                      <input type="number" value={planForm.priceCents / 100} onChange={e => setPlanForm(f => ({ ...f, priceCents: Math.round(Number(e.target.value) * 100) }))}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl pl-12 pr-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 font-bold" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Ciclo de Cobrança</label>
+                    <select value={planForm.billingInterval} onChange={e => setPlanForm(f => ({ ...f, billingInterval: e.target.value as 'month' | 'year' }))}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500 font-medium">
+                      <option value="month">Mensal</option>
+                      <option value="year">Anual</option>
+                    </select>
                   </div>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Ciclo</label>
-                  <select value={planForm.billingInterval} onChange={e => setPlanForm(f => ({ ...f, billingInterval: e.target.value as 'month' | 'year' }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500">
-                    <option value="month">Mensal</option>
-                    <option value="year">Anual</option>
-                  </select>
+              </div>
+
+              {/* Limites Quantitativos */}
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Limites de Recursos (Quantitativo)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Máx Usuários</label>
+                    <input type="number" min={1} value={planForm.users} onChange={e => setPlanForm(f => ({ ...f, users: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Máx Médicos</label>
+                    <input type="number" min={1} value={planForm.doctors} onChange={e => setPlanForm(f => ({ ...f, doctors: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Máx Agentes IA</label>
+                    <input type="number" min={0} value={planForm.agents} onChange={e => setPlanForm(f => ({ ...f, agents: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Máx Conexões Whats</label>
+                    <input type="number" min={1} value={planForm.whatsappConnections} onChange={e => setPlanForm(f => ({ ...f, whatsappConnections: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Máx Pacientes</label>
+                    <input type="number" min={10} value={planForm.patients} onChange={e => setPlanForm(f => ({ ...f, patients: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Msgs IA / Mês</label>
+                    <input type="number" min={100} value={planForm.aiMessagesMonth} onChange={e => setPlanForm(f => ({ ...f, aiMessagesMonth: Number(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:border-teal-500" />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Limite de Usuários</label>
-                  <input type="number" value={planForm.users} onChange={e => setPlanForm(f => ({ ...f, users: Number(e.target.value) }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Limite de Pacientes</label>
-                  <input type="number" value={planForm.patients} onChange={e => setPlanForm(f => ({ ...f, patients: Number(e.target.value) }))}
-                    className="w-full bg-slate-50 border border-teal-100 text-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-500" />
-                </div>
-                <div className="col-span-2 space-y-3">
-                  <label className="text-xs font-semibold text-slate-400 mb-1 block">Recursos</label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={planForm.whatsapp} onChange={e => setPlanForm(f => ({ ...f, whatsapp: e.target.checked }))}
-                      className="w-4 h-4 rounded bg-slate-50 border border-teal-200 text-teal-600 focus:ring-teal-500" />
-                    <span className="text-sm text-slate-300 flex items-center gap-2"><Smartphone size={16} /> WhatsApp Integrado</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={planForm.ai} onChange={e => setPlanForm(f => ({ ...f, ai: e.target.checked }))}
-                      className="w-4 h-4 rounded bg-slate-50 border border-teal-200 text-teal-600 focus:ring-teal-500" />
-                    <span className="text-sm text-slate-300 flex items-center gap-2"><Bot size={16} /> Agentes de IA</span>
-                  </label>
+              </div>
+
+              {/* Toggles de Módulos */}
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Módulos Acessíveis</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {[
+                    { key: 'agenda', label: 'Agenda Digital' },
+                    { key: 'pacientes', label: 'Gestão Pacientes' },
+                    { key: 'prontuarios', label: 'Prontuários' },
+                    { key: 'profissionais', label: 'Médicos & Equipe' },
+                    { key: 'acessos', label: 'Gestão Acessos' },
+                    { key: 'whatsapp', label: 'WhatsApp Inbox' },
+                    { key: 'ai', label: 'Central de IA' },
+                    { key: 'crm', label: 'CRM 360 & Funis' },
+                    { key: 'financeiro', label: 'Financeiro & DRE' },
+                    { key: 'marketing', label: 'Campanhas Mkt' },
+                    { key: 'tiss', label: 'Faturamento TISS' },
+                    { key: 'estoque', label: 'Estoque & Insumos' },
+                    { key: 'automacao', label: 'Automações Whats' },
+                    { key: 'nps_lgpd', label: 'NPS & LGPD' },
+                    { key: 'relatorios', label: 'Relatórios' },
+                    { key: 'ajuda', label: 'Suporte Ajuda' },
+                    { key: 'indique_ganhe', label: 'Indique & Ganhe' },
+                    { key: 'referencias', label: 'Materiais Ref' },
+                    { key: 'consulta_interativa', label: 'Consulta Interativa' },
+                    { key: 'llms', label: 'Config LLMs' },
+                    { key: 'neural', label: 'Base Neural' }
+                  ].map(mod => (
+                    <label key={mod.key} className={`flex items-center gap-2.5 p-3 rounded-2xl border cursor-pointer transition-all ${
+                      planForm.features[mod.key as keyof typeof planForm.features]
+                        ? 'bg-teal-50/70 border-teal-200 text-teal-900 font-bold'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 font-medium'
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(planForm.features[mod.key as keyof typeof planForm.features])}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setPlanForm(f => ({
+                            ...f,
+                            features: { ...f.features, [mod.key]: val }
+                          }));
+                        }}
+                        className="w-4 h-4 rounded text-teal-600 border-slate-300 focus:ring-teal-500"
+                      />
+                      <span className="text-xs truncate">{mod.label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-white/5 flex justify-end gap-3">
-              <button onClick={() => setShowPlanModal(false)} className="px-6 py-2.5 bg-white/5 border border-white/10 text-white rounded-xl font-medium hover:bg-white/10 transition-colors">
+
+            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 shrink-0 bg-slate-50">
+              <button onClick={() => setShowPlanModal(false)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-colors text-sm">
                 Cancelar
               </button>
               <button onClick={savePlan} disabled={!planForm.code || !planForm.name}
-                className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-2">
+                className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-2 text-sm shadow-md shadow-teal-100">
                 <Save size={16} />
-                {editingPlan ? 'Atualizar' : 'Criar Plano'}
+                {editingPlan ? 'Atualizar Plano' : 'Criar Plano'}
               </button>
             </div>
           </div>

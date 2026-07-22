@@ -14,8 +14,8 @@ export default defineConfig(() => {
         injectRegister: 'auto',
         includeAssets: ['pwa-icon.svg'],
         manifest: {
-          name: 'Consultio Med',
-          short_name: 'Consultio',
+          name: 'Woomed By Wootech',
+          short_name: 'Woomed',
           description: 'Gestão Inteligente de Clínicas e Consultórios',
           theme_color: '#0d9488',
           background_color: '#f8fafc',

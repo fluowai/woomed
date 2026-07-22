@@ -89,3 +89,72 @@ Fixed the 502 Bad Gateway error on Traefik/Production caused by synchronous data
 ### Verification
 - `npm run build`: Passed.
 - `npm run test:smoke`: Passed 100%.
+
+## 2026-07-22 - Full Audit & Root Cause Fix for 502 Bad Gateway (/api/v2/setup/status)
+
+### Summary
+Executed a comprehensive audit of the entire stack (Frontend, Backend Express, PostgreSQL PgBouncer Pooler, Traefik, Docker, and environment config) to diagnose and fix the root cause of `GET https://woomed.wootech.com.br/api/v2/setup/status -> 502 Bad Gateway`.
+
+### Key Root Causes & Fixes
+1. **Dynamic DDL Execution on Read Routes Removed**:
+   - `ensureCoreAuthSchema()` was executing a 72-line multi-statement SQL DDL script (`CREATE TABLE`, `ALTER TABLE ADD COLUMN`) on every read query inside `hasConfiguredSuperAdmin()`, `findUserByEmail()`, `findUserById()`, `createUser()`, and `/api/v2/onboarding/clinic`.
+   - On Supabase PgBouncer Transaction Pooler (`aws-1-sa-east-1.pooler.supabase.com:6543`), multi-statement DDL queries are prohibited/rejected, causing connection resets. Removed `ensureCoreAuthSchema()` from read endpoints (retaining it strictly in startup `runMigrations()`).
+2. **PostgreSQL Pool Async Error Handler Added**:
+   - Registered `pool.on('error', ...)` in `server/database.ts` so idle client disconnects from PgBouncer do not trigger uncaught EventEmitter `error` events and crash the Node.js Express process.
+3. **Frontend Clean-up & Null Safety**:
+   - Cleaned duplicated `switch(activeView)` cases in `src/App.tsx`.
+
+### Verification
+- `npm run test:smoke`: 100% Passed.
+- `npm run build`: Clean build with zero errors/warnings.
+
+## 2026-07-22 - CSP Google Fonts & Login 500 Fixes
+
+### Summary
+Fixed Content Security Policy (CSP) Google Fonts blocking and `POST /api/v2/auth/login` HTTP 500 Internal Server Error.
+
+### Key Changes
+1. **Helmet CSP Directives (`server.ts`)**:
+   - Added `https://fonts.googleapis.com` to `styleSrc` and `https://fonts.gstatic.com` to `fontSrc` to permit Google Fonts (Outfit).
+2. **Login & Password Verification Hardening (`server/auth.ts` & `server/routes/phase1.ts`)**:
+   - Made `verifyPassword()` in `server/auth.ts` fail-safe against malformed/non-bcrypt hash strings.
+   - Removed undefined `req.user?.tenantId` reference in `saveUserMfa` and `saveUserPassword` in `server/routes/phase1.ts`.
+   - Ensured `(data.users || [])` array checks in `findUserByEmail` and `findUserById` to prevent `TypeError: Cannot read properties of undefined (reading 'find')`.
+
+### Verification
+- `POST http://localhost:5174/api/v2/auth/login`: HTTP 200 SUCCESS (JWT Token & super_admin user returned).
+- `npm run test:smoke`: 100% Passed.
+- `npm run build`: Clean compilation.
+
+## 2026-07-22 - Master User (wootechsc@gmail.com) Seeding
+
+### Summary
+Seeded `wootechsc@gmail.com` with password `Argo@15077399brsc` as `super_admin` across PostgreSQL, `server/seed.ts`, and `data/consultio-data.json`.
+
+### Key Changes
+1. **Master Email Seeding (`server/database.ts`, `server/seed.ts`, `data/consultio-data.json`)**:
+   - Ensured both `wootechsc@gmail.com` and `wootechsc@outlook.com` are created and updated as `super_admin` with password `Argo@15077399brsc`.
+
+### Verification
+- `POST /api/v2/auth/login` with `wootechsc@gmail.com` / `Argo@15077399brsc`: HTTP 200 SUCCESS (`role: super_admin`).
+- `npm run test:smoke`: 100% Passed.
+
+## 2026-07-22 - Rebranding (Woomed By Wootech) & SaaS Plan Control
+
+### Summary
+Implemented complete system rebranding to **Woomed By Wootech** and built the **Granular SaaS Plan & Resource Limits Control** system for Super Admin.
+
+### Key Changes
+1. **Rebranding (Woomed By Wootech)**:
+   - Rebranded system titles, logos, header, sidebar, login, setup wizard, and PWA manifest (`index.html`, `vite.config.ts`, `Sidebar.tsx`, `Header.tsx`, `Login.tsx`, `SetupWizard.tsx`, `PwaInstallPrompt.tsx`).
+2. **SaaS Plan & Resource Limits Control**:
+   - Expanded [`DEFAULT_SAAS_PLANS`](file:///c:/Users/paulo/woomed/server/saas-defaults.ts) with full feature maps (Agenda, Pacientes, Prontuários, Profissionais, Acessos, WhatsApp, Central de IA, CRM 360, Financeiro, Marketing, TISS, Estoque, Automações, NPS/LGPD, Relatórios, etc.) and quantitative limits (`users`, `doctors`, `agents`, `whatsapp_connections`, `patients`, `ai_messages_month`).
+   - Enhanced Super Admin Plan Creator/Editor modal in [`SaaSAdmin.tsx`](file:///c:/Users/paulo/woomed/src/components/SaaSAdmin.tsx) to configure all resource limits and toggle access for every module.
+   - Expanded [`requireLimit`](file:///c:/Users/paulo/woomed/server/plan-guard.ts#L30-L50) in backend to enforce limits on doctors, users, agents, whatsapp connections, and patients (returning HTTP 402 with limit warnings when quota is reached).
+   - Enforced plan limit guards on creation endpoints in [`server/routes/index.ts`](file:///c:/Users/paulo/woomed/server/routes/index.ts), [`server/routes/whatsapp.ts`](file:///c:/Users/paulo/woomed/server/routes/whatsapp.ts), and [`server/routes/agents-v2.ts`](file:///c:/Users/paulo/woomed/server/routes/agents-v2.ts).
+   - Configured [`Sidebar.tsx`](file:///c:/Users/paulo/woomed/src/components/Sidebar.tsx) to visually badge disabled plan features with **Upgrade** lock icons and display informative upgrade prompts upon click.
+
+### Verification
+- `npm run test:smoke`: Passed 100%.
+- `npm run build`: Clean compilation with 0 errors.
+

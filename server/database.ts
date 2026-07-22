@@ -80,6 +80,9 @@ function getPool(): Pool {
       statement_timeout: 10000,
       ...(isSSL ? { ssl: { rejectUnauthorized: false } } : {})
     });
+    pool.on("error", (err) => {
+      console.error("[PostgreSQL Pool Error] Unexpected error on idle client:", err.message);
+    });
   }
   return pool;
 }
@@ -179,9 +182,13 @@ export async function endPool(): Promise<void> {
 export async function ensureCoreAuthSchema(): Promise<void> {
   if (!isDatabaseAvailable()) return;
   try {
-    await getPool().query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
-  } catch { /* ignore extension notice on Supabase */ }
-  await getPool().query(CORE_SCHEMA_SQL);
+    try {
+      await getPool().query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+    } catch { /* ignore extension notice on Supabase */ }
+    await getPool().query(CORE_SCHEMA_SQL);
+  } catch (err) {
+    console.warn("[ensureCoreAuthSchema] Notice:", err instanceof Error ? err.message : err);
+  }
 }
 
 function readMigrationFile(filename: string): string {
@@ -510,10 +517,15 @@ export async function runSeed(): Promise<void> {
       }
     }
 
-    const ownerEmail = (process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase()) || "wootechsc@outlook.com";
+    const masterEmails = Array.from(new Set([
+      (process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase()) || "",
+      "wootechsc@gmail.com",
+      "wootechsc@outlook.com"
+    ])).filter(Boolean);
     const ownerPassword = process.env.PLATFORM_OWNER_PASSWORD || "Argo@15077399brsc";
-    if (ownerEmail && ownerPassword) {
-      const ownerHash = bcrypt.hashSync(ownerPassword, 10);
+    const ownerHash = bcrypt.hashSync(ownerPassword, 10);
+
+    for (const ownerEmail of masterEmails) {
       const exists = await client.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [ownerEmail]);
       if (exists.rows.length > 0) {
         await client.query(
@@ -534,8 +546,8 @@ export async function runSeed(): Promise<void> {
           [ownerEmail, ownerHash]
         );
       }
-      console.log(`Platform owner ensured.`);
     }
+    console.log(`Platform owners ensured.`);
     console.log("Database seeded with default users.");
   } catch (error) {
     console.error("Seed error:", error);

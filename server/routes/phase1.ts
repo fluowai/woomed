@@ -25,20 +25,24 @@ interface DbUser {
 
 async function findUserByEmail(email: string) {
   if (isDatabaseAvailable()) {
-    await ensureCoreAuthSchema();
-    return queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    try {
+      const row = await queryOne<DbUser>("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+      if (row) return row;
+    } catch { /* fallthrough */ }
   }
   if (isSupabaseRestAvailable()) {
-    return supabaseRestFindOne<DbUser>("users", `select=*&email=eq.${encodeURIComponent(email.trim().toLowerCase())}`);
+    try {
+      const row = await supabaseRestFindOne<DbUser>("users", `select=*&email=eq.${encodeURIComponent(email.trim().toLowerCase())}`);
+      if (row) return row;
+    } catch { /* fallthrough */ }
   }
   const data = await loadData();
-  return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+  return (data.users || []).find(u => u.email?.toLowerCase() === email.toLowerCase());
 }
 
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
     try {
-      await ensureCoreAuthSchema();
       const row = await queryOne<{ exists: boolean }>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
       );
@@ -46,26 +50,30 @@ async function hasConfiguredSuperAdmin() {
     } catch { /* fallthrough */ }
   }
   if (isSupabaseRestAvailable()) {
-    const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
-    if (row) return true;
+    try {
+      const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
+      if (row) return true;
+    } catch { /* fallthrough */ }
   }
   const data = await loadData();
-  return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
+  return (data.users || []).some(u => u.role === "super_admin" && u.isActive !== false);
 }
 
 async function findUserById(id: string) {
   if (isDatabaseAvailable()) {
     try {
-      await ensureCoreAuthSchema();
       const row = await queryOne<DbUser>("SELECT * FROM users WHERE id = $1", [id]);
       if (row) return row;
     } catch { /* fallthrough */ }
   }
   if (isSupabaseRestAvailable()) {
-    return supabaseRestFindOne<DbUser>("users", `select=*&id=eq.${encodeURIComponent(id)}`);
+    try {
+      const row = await supabaseRestFindOne<DbUser>("users", `select=*&id=eq.${encodeURIComponent(id)}`);
+      if (row) return row;
+    } catch { /* fallthrough */ }
   }
   const data = await loadData();
-  return data.users.find(u => u.id === id);
+  return (data.users || []).find(u => u.id === id);
 }
 
 function dbUserToApp(db: DbUser | Record<string, any>) {
@@ -78,7 +86,7 @@ async function saveUserMfa(userId: string, mfaSecret: string, mfaEnabled: boolea
       await query("UPDATE users SET mfa_secret = $1, mfa_enabled = $2 WHERE id = $3", [mfaSecret, mfaEnabled, userId]);
     } catch { /* fallthrough */ }
   }
-  const data = await loadData(req.user?.tenantId);
+  const data = await loadData();
   const user = data.users.find(u => u.id === userId);
   if (user) {
     user.mfaSecret = mfaSecret;
@@ -93,7 +101,7 @@ async function saveUserPassword(userId: string, passwordHash: string) {
       await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
     } catch { /* fallthrough */ }
   }
-  const data = await loadData(req.user?.tenantId);
+  const data = await loadData();
   const user = data.users.find(u => u.id === userId);
   if (user) {
     user.passwordHash = passwordHash;

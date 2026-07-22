@@ -77,7 +77,8 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
             <div className="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center mb-8">
               <Stethoscope size={30} />
             </div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-4">Consultio Med</h1>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-1">Woomed</h1>
+            <p className="text-xs font-bold uppercase tracking-widest text-teal-200 mb-4">by Wootech</p>
             <p className="text-blue-100 leading-relaxed max-w-xl">
               Ambiente operacional com agenda, pacientes, prontuario, financeiro, auditoria e perfis de acesso.
             </p>

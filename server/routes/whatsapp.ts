@@ -14,6 +14,8 @@ import { processIncomingMessage } from "../modules/agent-router";
 import { enqueueBufferedMessage } from "../modules/message-buffer";
 import { markAiMessage, pauseAi } from "../modules/agent-control";
 
+import { featureGuard, limitGuard } from "../plan-guard";
+
 export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -42,7 +44,7 @@ export function registerWhatsAppRoutes(app: Express, httpServer: Server) {
     res.json({ connections: data.whatsappConnections.map(sanitizeConnection) });
   });
 
-  app.post("/api/whatsapp/connections", requireAuth, requireRoles("admin", "reception"), async (req: AuthedRequest, res) => {
+  app.post("/api/whatsapp/connections", requireAuth, requireRoles("admin", "reception"), featureGuard("whatsapp"), limitGuard("whatsapp_connections"), async (req: AuthedRequest, res) => {
     const data = await loadData(req.user?.tenantId);
     const { name } = req.body || {};
     if (!name) return res.status(400).json({ error: "Nome da conexao e obrigatorio." });

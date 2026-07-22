@@ -87,7 +87,7 @@ export function PwaInstallPrompt() {
               <Download size={20} />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-black text-slate-800">Instalar Consultio Med</p>
+              <p className="text-sm font-black text-slate-800">Instalar Woomed By Wootech</p>
               <p className="text-xs text-slate-500 font-medium">Adicione à tela inicial para acesso rápido</p>
             </div>
           </div>

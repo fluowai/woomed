@@ -527,27 +527,45 @@ export class DataService {
   async loadFullState(tenantId?: string): Promise<AppData | null> {
     if (!isDatabaseAvailable()) return null;
     try {
-      const data: AppData = {} as AppData;
+      const { defaultData } = await import("./data");
+      const data: AppData = defaultData();
       data.patients = await this.getPatients(tenantId);
       data.doctors = await this.getDoctors(tenantId);
       data.appointments = await this.getAppointments(tenantId);
       data.financeTransactions = await this.getFinanceTransactions(tenantId);
       data.medicalRecords = await this.getMedicalRecords(tenantId);
-      data.serviceAgents = await this.findAll<import('../src/types').ServiceAgent>(TABLES.serviceAgents, tenantId);
-      data.marketingCampaigns = await this.findAll<import('../src/types').MarketingCampaign>(TABLES.marketingCampaigns, tenantId);
-      data.tissGuides = await this.findAll<import('../src/types').TissGuide>(TABLES.tissGuides, tenantId);
-      data.inventoryItems = await this.findAll<import('../src/types').InventoryItem>(TABLES.inventoryItems, tenantId);
-      data.referrals = await this.findAll<import('../src/types').ReferralRecord>(TABLES.referrals, tenantId);
-      data.references = await this.findAll<import('../src/types').ReferenceMaterial>(TABLES.referenceMaterials, tenantId);
-      data.helpTickets = await this.findAll<import('../src/types').HelpTicket>(TABLES.helpTickets, tenantId);
-      data.llmProviderConfigs = await this.findAll<import('../src/types').LlmProviderConfig>(TABLES.llmProviderConfigs, tenantId);
-      data.neuralKnowledge = await this.findAll<import('../src/types').NeuralKnowledgeItem>(TABLES.neuralKnowledge, tenantId);
-      data.patientDocuments = await this.findAll<import('../src/types').PatientDocument>(TABLES.patientDocuments, tenantId);
-      data.waitingList = await this.findAll<import('../src/types').WaitingListEntry>(TABLES.waitingList, tenantId);
-      data.scheduleBlocks = await this.findAll<import('../src/types').ScheduleBlock>(TABLES.scheduleBlocks, tenantId);
-      data.medicalTemplates = await this.findAll<import('../src/types').MedicalTemplate>(TABLES.medicalTemplates, tenantId);
-      data.accountsPayable = await this.findAll<import('../src/types').AccountsPayable>(TABLES.accountsPayable, tenantId);
-      data.paymentGatewayConfig = await this.findAll<import('../src/types').PaymentGatewayConfig>(TABLES.paymentGatewayConfig, tenantId);
+      data.serviceAgents = (await this.findAll<import('../src/types').ServiceAgent>(TABLES.serviceAgents, tenantId)) || [];
+      data.marketingCampaigns = (await this.findAll<import('../src/types').MarketingCampaign>(TABLES.marketingCampaigns, tenantId)) || [];
+      data.tissGuides = (await this.findAll<import('../src/types').TissGuide>(TABLES.tissGuides, tenantId)) || [];
+      data.inventoryItems = (await this.findAll<import('../src/types').InventoryItem>(TABLES.inventoryItems, tenantId)) || [];
+      data.referrals = (await this.findAll<import('../src/types').ReferralRecord>(TABLES.referrals, tenantId)) || [];
+      data.references = (await this.findAll<import('../src/types').ReferenceMaterial>(TABLES.referenceMaterials, tenantId)) || [];
+      data.helpTickets = (await this.findAll<import('../src/types').HelpTicket>(TABLES.helpTickets, tenantId)) || [];
+      data.llmProviderConfigs = (await this.findAll<import('../src/types').LlmProviderConfig>(TABLES.llmProviderConfigs, tenantId)) || [];
+      data.neuralKnowledge = (await this.findAll<import('../src/types').NeuralKnowledgeItem>(TABLES.neuralKnowledge, tenantId)) || [];
+      data.patientDocuments = (await this.findAll<import('../src/types').PatientDocument>(TABLES.patientDocuments, tenantId)) || [];
+      data.waitingList = (await this.findAll<import('../src/types').WaitingListEntry>(TABLES.waitingList, tenantId)) || [];
+      data.scheduleBlocks = (await this.findAll<import('../src/types').ScheduleBlock>(TABLES.scheduleBlocks, tenantId)) || [];
+      data.medicalTemplates = (await this.findAll<import('../src/types').MedicalTemplate>(TABLES.medicalTemplates, tenantId)) || [];
+      data.accountsPayable = (await this.findAll<import('../src/types').AccountsPayable>(TABLES.accountsPayable, tenantId)) || [];
+      data.paymentGatewayConfig = (await this.findAll<import('../src/types').PaymentGatewayConfig>(TABLES.paymentGatewayConfig, tenantId)) || [];
+
+      try {
+        const { query } = await import("./database");
+        const dbTenants = await query<any>("SELECT id, slug, legal_name AS \"legalName\", trade_name AS \"tradeName\", document, owner_email AS \"ownerEmail\", phone, status, plan_id AS \"planId\", timezone, locale, settings, trial_ends_at AS \"trialEndsAt\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM tenants");
+        if (Array.isArray(dbTenants) && dbTenants.length > 0) {
+          data.tenants = dbTenants;
+        }
+      } catch { /* fallthrough */ }
+
+      try {
+        const { query } = await import("./database");
+        const dbUsers = await query<any>("SELECT id, tenant_id AS \"tenantId\", email, name, password_hash AS \"passwordHash\", role, specialty, mfa_secret AS \"mfaSecret\", mfa_enabled AS \"mfaEnabled\", is_active AS \"isActive\" FROM users");
+        if (Array.isArray(dbUsers) && dbUsers.length > 0) {
+          data.users = dbUsers;
+        }
+      } catch { /* fallthrough */ }
+
       return data;
     } catch {
       return null;

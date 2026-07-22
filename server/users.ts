@@ -28,7 +28,6 @@ export async function createUser(input: UserCreateInput, actor: AppUser): Promis
     throw new Error("Ja existe um usuario com este email.");
   }
   if (isDatabaseAvailable()) {
-    await ensureCoreAuthSchema();
     const existingDb = await queryOne<{ id: string }>("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [input.email]);
     if (existingDb) throw new Error("Ja existe um usuario com este email.");
   } else if (isSupabaseRestAvailable()) {

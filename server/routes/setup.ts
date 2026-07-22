@@ -10,7 +10,6 @@ import rateLimit from "express-rate-limit";
 async function hasConfiguredSuperAdmin() {
   if (isDatabaseAvailable()) {
     try {
-      await ensureCoreAuthSchema();
       const row = await queryOne<{ exists: boolean }>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND COALESCE(is_active, TRUE) = TRUE) AS exists"
       );
@@ -18,11 +17,17 @@ async function hasConfiguredSuperAdmin() {
     } catch { /* fallthrough */ }
   }
   if (isSupabaseRestAvailable()) {
-    const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
-    if (row) return true;
+    try {
+      const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
+      if (row) return true;
+    } catch { /* fallthrough */ }
   }
-  const data = await loadData();
-  return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
+  try {
+    const data = await loadData();
+    return (data.users || []).some(u => u.role === "super_admin" && u.isActive !== false);
+  } catch {
+    return false;
+  }
 }
 
 const setupLimiter = rateLimit({

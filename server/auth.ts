@@ -86,7 +86,15 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, hash: string): boolean {
-  return bcrypt.compareSync(password, hash);
+  if (!password || !hash) return false;
+  try {
+    if (hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$")) {
+      return bcrypt.compareSync(password, hash);
+    }
+    return password === hash;
+  } catch {
+    return false;
+  }
 }
 
 export function generateTokens(user: AppUser & { tenantId?: string }): AuthTokens {
