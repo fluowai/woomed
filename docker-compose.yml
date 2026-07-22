@@ -1,104 +1,92 @@
 version: "3.8"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: consultio
-      POSTGRES_USER: consultio
-      POSTGRES_PASSWORD: "${DB_PASSWORD:-consultiopassword}"
-    volumes:
-      - data_postgres:/var/lib/postgresql/data
-    networks:
-      - woomed-internal
-    restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U consultio -d consultio"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   api:
     image: ghcr.io/fluowai/consultio-api:latest
-    env_file:
-      - .env.production
     environment:
       NODE_ENV: production
-      PORT: "5173"
-      APP_URL: "https://woomed.consultio.com.br"
-      CORS_ORIGIN: "https://woomed.consultio.com.br"
-      DATABASE_URL: "postgresql://consultio:${DB_PASSWORD:-consultiopassword}@postgres:5432/consultio"
-      WHATSMEOW_API_URL: "http://whatsmeow-bridge:8080"
+      PORT: "3000"
+      APP_URL: "https://woomed.wootech.com.br"
+      ALLOWED_ORIGINS: "https://woomed.wootech.com.br"
+      CORS_ORIGIN: "https://woomed.wootech.com.br"
+      
+      # Chave JWT unificada com o Supabase (enviada pelo painel)
+      JWT_SECRET: "bhj47BqUl6kamMPlO1lTR8gEiiKJNgD8m7acHGwJGwXkS1ywp63fq6pLMEWiCQDwmeB44AId/a4mA+HyJn/J6g=="
+      ENCRYPTION_MASTER_KEY: "5bed35283ee9ab7757adf67c4734511e20a15ff120ace253cb23e8887ca7bc22"
+      
+      # Forçando Pooler IPv4 com pgbouncer=true para evitar travamento em ambientes sem IPv6
+      DATABASE_URL: "postgresql://postgres.fmhmmayrlsgdmxabosou:SMFpB5h8bBz9yulj@aws-1-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true" 
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co" 
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q" 
+      SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDA3NTYzNiwiZXhwIjoyMDk1NjUxNjM2fQ.PvAOXsYhdgtdTXkclkR1LERKxc2c2wLKzXPq3Oa_M9I"
+
+      # WhatsMeow isolado no container abaixo, mas na mesma stack
+      WHATSMEOW_EXTERNAL_URL: "http://whatsmeow-bridge:8080"
+      WHATSMEOW_WEBHOOK_SECRET: "39c777bdfc47b8fb40198f98fde2f2abb0671c0dafe62a5e3b5008bbe9fc99a4"
+      
+      PLATFORM_OWNER_EMAIL: "noreplay@wootech.com.br"
+      PLATFORM_OWNER_PASSWORD: "consultiopassword"
+
     volumes:
-      - data_api:/app/data
-      - data_uploads:/app/uploads
+      - consultio_api:/app/data
+      - consultio_uploads:/app/uploads
     networks:
-      - woopanel1
-      - woomed-internal
-    depends_on:
-      postgres:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=woopanel1"
-      - "traefik.http.routers.woomed_api.rule=Host(`woomed.consultio.com.br`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.woomed_api.entrypoints=websecure"
-      - "traefik.http.routers.woomed_api.tls.certresolver=letsencryptresolver"
-      - "traefik.http.routers.woomed_api.priority=200"
-      - "traefik.http.routers.woomed_api.service=woomed_api"
-      - "traefik.http.services.woomed_api.loadbalancer.server.port=5173"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5173/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: always
+      - wootech1
+      - woomed-net
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=wootech1"
+        - "traefik.http.routers.woomed-api.rule=Host(`woomed.wootech.com.br`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.woomed-api.entrypoints=websecure"
+        - "traefik.http.routers.woomed-api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.woomed-api.priority=200"
+        - "traefik.http.services.woomed-api.loadbalancer.server.port=3000"
 
   frontend:
     image: ghcr.io/fluowai/consultio-frontend:latest
     environment:
-      VITE_API_URL: "same-origin"
+      VITE_API_URL: "/api"
+      VITE_SUPABASE_URL: "https://fmhmmayrlsgdmxabosou.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtaG1tYXlybHNnZG14YWJvc291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzU2MzYsImV4cCI6MjA5NTY1MTYzNn0.O5J5wgJH7ordxvlWwmol9OswoNS-TIJjxN6fYOI-K4Q"
     networks:
-      - woopanel1
-      - woomed-internal
-    depends_on:
-      api:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=woopanel1"
-      - "traefik.http.routers.woomed_frontend.rule=Host(`woomed.consultio.com.br`)"
-      - "traefik.http.routers.woomed_frontend.entrypoints=websecure"
-      - "traefik.http.routers.woomed_frontend.tls.certresolver=letsencryptresolver"
-      - "traefik.http.routers.woomed_frontend.priority=100"
-      - "traefik.http.routers.woomed_frontend.service=woomed_frontend"
-      - "traefik.http.services.woomed_frontend.loadbalancer.server.port=80"
-    restart: always
+      - wootech1
+      - woomed-net
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=wootech1"
+        - "traefik.http.routers.woomed.rule=Host(`woomed.wootech.com.br`)"
+        - "traefik.http.routers.woomed.entrypoints=websecure"
+        - "traefik.http.routers.woomed.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.woomed.loadbalancer.server.port=80"
 
-  whatsmeow:
+  whatsmeow-bridge:
     image: ghcr.io/fluowai/consultio-whatsmeow:latest
     environment:
       PORT: "8080"
-      WHATSMEOW_DATA_DIR: /app/data
-      APP_WEBHOOK_URL: "http://api:5173/api/whatsapp/webhook"
-      WHATSMEOW_WEBHOOK_SECRET: "${WHATSMEOW_WEBHOOK_SECRET}"
+      WHATSMEOW_DATA_DIR: "/app/data"
+      APP_WEBHOOK_URL: "http://api:3000/api/whatsapp/webhook"
+      WHATSMEOW_WEBHOOK_SECRET: "39c777bdfc47b8fb40198f98fde2f2abb0671c0dafe62a5e3b5008bbe9fc99a4"
     volumes:
-      - data_wpp:/app/data
+      - consultio_wpp:/app/data
     networks:
-      - woomed-internal
-    restart: always
+      - woomed-net
+    deploy:
+      restart_policy:
+        condition: any
 
 volumes:
-  data_postgres:
-  data_api:
-  data_uploads:
-  data_wpp:
+  consultio_api:
+  consultio_uploads:
+  consultio_wpp:
 
 networks:
-  woopanel1:
+  wootech1:
     external: true
-    name: woopanel1
-  woomed-internal:
-    driver: bridge
+  woomed-net:
+    driver: overlay

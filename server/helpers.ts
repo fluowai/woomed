@@ -15,6 +15,9 @@ export async function audit(data: AppData, user: AppUser, action: string, entity
     entityId,
     details
   };
+  if (!Array.isArray(data.auditEvents)) {
+    data.auditEvents = [];
+  }
   data.auditEvents.push(entry);
 
   if (isDatabaseAvailable()) {

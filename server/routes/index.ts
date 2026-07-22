@@ -36,24 +36,32 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/bootstrap", requireAuth, async (req: AuthedRequest, res) => {
-    const isDb = isDatabaseAvailable();
-    let data;
-    if (isDb && req.user?.tenantId) {
-      // If DB is available, only load data for the current tenant to save memory
-      data = (await dataService.loadFullState(req.user?.tenantId)) || await loadData(req.user?.tenantId);
-    } else {
-      data = await loadData(req.user?.tenantId);
+    try {
+      const isDb = isDatabaseAvailable();
+      let data;
+      if (isDb && req.user?.tenantId) {
+        // If DB is available, only load data for the current tenant to save memory
+        data = (await dataService.loadFullState(req.user?.tenantId)) || await loadData(req.user?.tenantId);
+      } else {
+        data = await loadData(req.user?.tenantId);
+      }
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+      const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10)));
+      const state = buildState(data, req.user!);
+      if (req.query.page || req.query.limit) {
+        const paginate = <T>(items: T[]): T[] => (Array.isArray(items) ? items.slice((page - 1) * limit, page * limit) : []);
+        state.patients = paginate(state.patients);
+        state.appointments = paginate(state.appointments);
+        state.financeTransactions = paginate(state.financeTransactions);
+      }
+      res.json(state);
+    } catch (error) {
+      console.error("[Bootstrap Error]", error);
+      res.status(500).json({
+        error: "Erro ao carregar dados de inicializacao do sistema.",
+        detail: error instanceof Error ? error.message : String(error)
+      });
     }
-    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10)));
-    const state = buildState(data, req.user!);
-    if (req.query.page || req.query.limit) {
-      const paginate = <T>(items: T[]): T[] => items.slice((page - 1) * limit, page * limit);
-      state.patients = paginate(state.patients);
-      state.appointments = paginate(state.appointments);
-      state.financeTransactions = paginate(state.financeTransactions);
-    }
-    res.json(state);
   });
 
   // PATIENTS
@@ -608,14 +616,16 @@ export function registerRoutes(app: Express) {
 }
 
 function scopedItems<T extends { tenantId?: string }>(items: T[], tenantId?: string, includeGlobal = false): T[] {
-  if (!tenantId) return includeGlobal ? items.filter(item => !item.tenantId) : [];
-  return items.filter(item => item.tenantId === tenantId || (includeGlobal && !item.tenantId));
+  const safeItems = Array.isArray(items) ? items : [];
+  if (!tenantId) return includeGlobal ? safeItems.filter(item => !item.tenantId) : [];
+  return safeItems.filter(item => item.tenantId === tenantId || (includeGlobal && !item.tenantId));
 }
 
 function scopedMedicalRecords(data: AppData, tenantId?: string) {
   if (!tenantId) return {};
-  const patientIds = new Set(scopedItems(data.patients as any[], tenantId).map(patient => patient.id));
-  return Object.fromEntries(Object.entries(data.medicalRecords).filter(([patientId]) => patientIds.has(patientId)));
+  const patientIds = new Set(scopedItems(data?.patients as any[], tenantId).map(patient => patient.id));
+  const records = data?.medicalRecords || {};
+  return Object.fromEntries(Object.entries(records).filter(([patientId]) => patientIds.has(patientId)));
 }
 
 export function buildState(data: AppData, user: { id: string; name: string; role: string; tenantId?: string }) {
@@ -624,37 +634,38 @@ export function buildState(data: AppData, user: { id: string; name: string; role
   const isPlatform = role === "super_admin" && !tenantId;
   const currentPlan = resolveTenantPlan(data, tenantId);
   const financeRoles = ["admin", "finance"];
-  const patientScope = isPlatform ? [] : scopedItems(data.patients as any[], tenantId);
-  const doctorScope = isPlatform ? [] : scopedItems(data.doctors as any[], tenantId);
-  const appointmentScope = isPlatform ? [] : scopedItems(data.appointments as any[], tenantId);
-  const auditScope = isPlatform ? data.auditEvents : data.auditEvents.filter(event => !tenantId || (event as any).tenantId === tenantId || event.actorId === user.id);
+  const patientScope = isPlatform ? [] : scopedItems(data?.patients as any[], tenantId);
+  const doctorScope = isPlatform ? [] : scopedItems(data?.doctors as any[], tenantId);
+  const appointmentScope = isPlatform ? [] : scopedItems(data?.appointments as any[], tenantId);
+  const rawAudit = Array.isArray(data?.auditEvents) ? data.auditEvents : [];
+  const auditScope = isPlatform ? rawAudit : rawAudit.filter(event => !tenantId || (event as any).tenantId === tenantId || event.actorId === user.id);
   return {
     user,
     patients: patientScope,
     doctors: doctorScope,
     appointments: appointmentScope,
     medicalRecords: role === "admin" || role === "doctor" ? scopedMedicalRecords(data, tenantId) : {},
-    financeTransactions: financeRoles.includes(role) ? scopedItems(data.financeTransactions as any[], tenantId) : [],
-    servicePrices: isPlatform ? [] : scopedItems(data.servicePrices as any[], tenantId, true),
+    financeTransactions: financeRoles.includes(role) ? scopedItems(data?.financeTransactions as any[], tenantId) : [],
+    servicePrices: isPlatform ? [] : scopedItems(data?.servicePrices as any[], tenantId, true),
     auditEvents: role === "admin" || role === "super_admin" ? auditScope.slice(-200).reverse() : [],
-    serviceAgents: isPlatform ? [] : scopedItems(data.serviceAgents as any[], tenantId),
-    marketingCampaigns: isPlatform ? [] : scopedItems(data.marketingCampaigns as any[], tenantId),
-    tissGuides: financeRoles.includes(role) ? scopedItems(data.tissGuides as any[], tenantId) : [],
-    inventoryItems: isPlatform ? [] : scopedItems(data.inventoryItems as any[], tenantId),
-    referrals: isPlatform ? [] : scopedItems(data.referrals as any[], tenantId),
-    references: isPlatform ? [] : scopedItems(data.references as any[], tenantId, true),
-    helpTickets: isPlatform ? [] : scopedItems(data.helpTickets as any[], tenantId),
-    llmProviderConfigs: role === "admin" ? scopedItems(data.llmProviderConfigs as any[], tenantId, true) : [],
-    agentTemplates: data.agentTemplates,
-    neuralKnowledge: isPlatform ? [] : scopedItems(data.neuralKnowledge as any[], tenantId, true),
-    patientDocuments: isPlatform ? [] : scopedItems(data.patientDocuments as any[], tenantId),
-    waitingList: isPlatform ? [] : scopedItems(data.waitingList as any[], tenantId),
-    scheduleBlocks: isPlatform ? [] : scopedItems(data.scheduleBlocks as any[], tenantId),
-    medicalTemplates: isPlatform ? [] : scopedItems(data.medicalTemplates as any[], tenantId),
-    accountsPayable: financeRoles.includes(role) ? scopedItems(data.accountsPayable as any[], tenantId) : [],
-    paymentGatewayConfig: role === "admin" ? scopedItems(data.paymentGatewayConfig as any[], tenantId) : [],
-    tenants: role === "super_admin" ? data.tenants : [],
-    plans: role === "super_admin" ? data.plans : [],
+    serviceAgents: isPlatform ? [] : scopedItems(data?.serviceAgents as any[], tenantId),
+    marketingCampaigns: isPlatform ? [] : scopedItems(data?.marketingCampaigns as any[], tenantId),
+    tissGuides: financeRoles.includes(role) ? scopedItems(data?.tissGuides as any[], tenantId) : [],
+    inventoryItems: isPlatform ? [] : scopedItems(data?.inventoryItems as any[], tenantId),
+    referrals: isPlatform ? [] : scopedItems(data?.referrals as any[], tenantId),
+    references: isPlatform ? [] : scopedItems(data?.references as any[], tenantId, true),
+    helpTickets: isPlatform ? [] : scopedItems(data?.helpTickets as any[], tenantId),
+    llmProviderConfigs: role === "admin" ? scopedItems(data?.llmProviderConfigs as any[], tenantId, true) : [],
+    agentTemplates: Array.isArray(data?.agentTemplates) ? data.agentTemplates : [],
+    neuralKnowledge: isPlatform ? [] : scopedItems(data?.neuralKnowledge as any[], tenantId, true),
+    patientDocuments: isPlatform ? [] : scopedItems(data?.patientDocuments as any[], tenantId),
+    waitingList: isPlatform ? [] : scopedItems(data?.waitingList as any[], tenantId),
+    scheduleBlocks: isPlatform ? [] : scopedItems(data?.scheduleBlocks as any[], tenantId),
+    medicalTemplates: isPlatform ? [] : scopedItems(data?.medicalTemplates as any[], tenantId),
+    accountsPayable: financeRoles.includes(role) ? scopedItems(data?.accountsPayable as any[], tenantId) : [],
+    paymentGatewayConfig: role === "admin" ? scopedItems(data?.paymentGatewayConfig as any[], tenantId) : [],
+    tenants: role === "super_admin" ? (Array.isArray(data?.tenants) ? data.tenants : []) : [],
+    plans: role === "super_admin" ? (Array.isArray(data?.plans) ? data.plans : []) : [],
     planFeatures: currentPlan?.features || {},
     planLimits: currentPlan?.limits || {},
     currentPlan: currentPlan ? { id: currentPlan.id, code: currentPlan.code, name: currentPlan.name } : undefined,

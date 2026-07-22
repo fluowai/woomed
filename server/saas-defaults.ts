@@ -94,8 +94,10 @@ export const DEFAULT_SAAS_PLANS: SaaSPlan[] = [
   }
 ];
 
-export function mergeDefaultPlans(plans: SaaSPlan[]): SaaSPlan[] {
-  const byCode = new Map(plans.map(plan => [plan.code.toUpperCase(), plan]));
+export function mergeDefaultPlans(plans?: SaaSPlan[]): SaaSPlan[] {
+  const safePlans = Array.isArray(plans) ? plans : [];
+  const byCode = new Map(safePlans.map(plan => [plan.code ? plan.code.toUpperCase() : "", plan]));
+  byCode.delete("");
   for (const plan of DEFAULT_SAAS_PLANS) {
     const existing = byCode.get(plan.code);
     if (existing) {

@@ -31,7 +31,7 @@ async function findUserByEmail(email: string) {
   if (isSupabaseRestAvailable()) {
     return supabaseRestFindOne<DbUser>("users", `select=*&email=eq.${encodeURIComponent(email.trim().toLowerCase())}`);
   }
-  const data = await loadData(req.user?.tenantId);
+  const data = await loadData();
   return data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 }
 
@@ -49,7 +49,7 @@ async function hasConfiguredSuperAdmin() {
     const row = await supabaseRestFindOne<{ id: string }>("users", "select=id&role=eq.super_admin&is_active=eq.true");
     if (row) return true;
   }
-  const data = await loadData(req.user?.tenantId);
+  const data = await loadData();
   return data.users.some(u => u.role === "super_admin" && u.isActive !== false);
 }
 
@@ -64,7 +64,7 @@ async function findUserById(id: string) {
   if (isSupabaseRestAvailable()) {
     return supabaseRestFindOne<DbUser>("users", `select=*&id=eq.${encodeURIComponent(id)}`);
   }
-  const data = await loadData(req.user?.tenantId);
+  const data = await loadData();
   return data.users.find(u => u.id === id);
 }
 

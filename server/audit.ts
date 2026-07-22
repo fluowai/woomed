@@ -28,6 +28,9 @@ export async function audit(data: AppData, user: AppUser, action: string, entity
   };
 
   // Always write to JSON (fallback)
+  if (!Array.isArray(data.auditEvents)) {
+    data.auditEvents = [];
+  }
   data.auditEvents.push(entry);
 
   // Also write to Supabase when available

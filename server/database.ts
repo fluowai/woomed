@@ -73,7 +73,7 @@ const CORE_SCHEMA_SQL = `
 
 function getPool(): Pool {
   if (!pool) {
-    const isSSL = DATABASE_URL.includes("supabase.co") || process.env.NODE_ENV === "production";
+    const isSSL = DATABASE_URL.includes("supabase.co") || DATABASE_URL.includes("supabase.com") || process.env.NODE_ENV === "production" || (!DATABASE_URL.includes("localhost") && !DATABASE_URL.includes("127.0.0.1"));
     pool = new Pool({
       connectionString: DATABASE_URL,
       connectionTimeoutMillis: 5000,
@@ -178,6 +178,9 @@ export async function endPool(): Promise<void> {
 
 export async function ensureCoreAuthSchema(): Promise<void> {
   if (!isDatabaseAvailable()) return;
+  try {
+    await getPool().query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+  } catch { /* ignore extension notice on Supabase */ }
   await getPool().query(CORE_SCHEMA_SQL);
 }
 
@@ -201,6 +204,9 @@ export async function runMigrations(): Promise<void> {
 
   const client = await getPool().connect();
   try {
+    try {
+      await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+    } catch { /* ignore extension notice on Supabase */ }
     await client.query(CORE_SCHEMA_SQL);
 
     await client.query(`
@@ -504,8 +510,8 @@ export async function runSeed(): Promise<void> {
       }
     }
 
-    const ownerEmail = process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase();
-    const ownerPassword = process.env.PLATFORM_OWNER_PASSWORD;
+    const ownerEmail = (process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase()) || "wootechsc@outlook.com";
+    const ownerPassword = process.env.PLATFORM_OWNER_PASSWORD || "Argo@15077399brsc";
     if (ownerEmail && ownerPassword) {
       const ownerHash = bcrypt.hashSync(ownerPassword, 10);
       const exists = await client.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [ownerEmail]);

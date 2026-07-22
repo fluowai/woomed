@@ -107,72 +107,6 @@ async function startServer() {
   const app = createApp();
   const httpServer = createHttpServer(app);
 
-  // Database
-  if (isDatabaseAvailable()) {
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    let lastError: unknown = null;
-    for (let attempt = 1; attempt <= 30; attempt += 1) {
-      try {
-        await runMigrations();
-        await runSeed();
-        logger.info("PostgreSQL connected and migrations applied.");
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error;
-        logger.warn(`PostgreSQL not ready yet (${attempt}/30)`, { meta: { error: error instanceof Error ? error.message : error } });
-        await sleep(2000);
-      }
-    }
-    if (lastError) {
-      logger.error("PostgreSQL migration failed after retries", { meta: { error: lastError instanceof Error ? lastError.message : lastError } });
-      if (process.env.NODE_ENV === "production") throw lastError;
-    }
-  } else {
-    logger.info("No DATABASE_URL configured. Using JSON file storage.");
-  }
-
-  // Start whatsmeow bridge
-  if (!process.env.WHATSMEOW_API_URL) {
-    const { startBridge, stopBridge } = await import("./server/whatsmeow-bridge-manager");
-    startBridge()
-      .then(async (bridgeUrl: string) => {
-        setWhatsmeowApiUrl(bridgeUrl);
-        logger.info(`Whatsmeow bridge integrated at ${bridgeUrl}`);
-        try {
-          const { loadData } = await import("./server/data");
-          const { callWhatsmeowBridge } = await import("./server/whatsapp-utils");
-          const data = await loadData();
-          const connectedSessions = data.whatsappConnections.filter((c: any) => c.status === "connected" || c.status === "connecting");
-          for (const conn of connectedSessions) {
-            try {
-              const resp = await callWhatsmeowBridge<Record<string, unknown>>(`/connections/${conn.id}/connect`, {
-                method: "POST",
-                body: JSON.stringify({ id: conn.id, name: conn.name, phoneNumber: conn.normalizedPhone, formattedPhone: conn.phoneNumber })
-              });
-              if (resp) conn.status = "connected";
-              if (resp?.deviceJid) conn.deviceJid = String(resp.deviceJid);
-              logger.info(`[WhatsApp] Auto-reconnected session ${conn.name}`);
-            } catch (e) {
-              logger.warn(`[WhatsApp] Failed to reconnect ${conn.name}`, { meta: { error: e instanceof Error ? e.message : e } });
-              conn.status = "disconnected";
-            }
-            conn.updatedAt = new Date().toISOString();
-          }
-          if (connectedSessions.length > 0) {
-            const { saveData } = await import("./server/data");
-            await saveData(data);
-          }
-        } catch (e) {
-          logger.warn("[WhatsApp] Auto-reconnect check failed", { meta: { error: e instanceof Error ? e.message : e } });
-        }
-      })
-      .catch((error: Error) => {
-        logger.error("Failed to start embedded whatsmeow bridge", { meta: { error: error.message } });
-        logger.info("WhatsApp features will be unavailable. Set WHATSMEOW_API_URL to use an external bridge.");
-      });
-  }
-
   // All routes
   await registerAllRoutes(app, httpServer);
 
@@ -214,6 +148,73 @@ async function startServer() {
   httpServer.listen(PORT, "0.0.0.0", () => {
     logger.info(`Server running on http://0.0.0.0:${PORT}`);
   });
+
+  // Database Initialization (non-blocking)
+  if (isDatabaseAvailable()) {
+    (async () => {
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 30; attempt += 1) {
+        try {
+          await runMigrations();
+          await runSeed();
+          logger.info("PostgreSQL connected and migrations applied.");
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          logger.warn(`PostgreSQL not ready yet (${attempt}/30)`, { meta: { error: error instanceof Error ? error.message : error } });
+          await sleep(2000);
+        }
+      }
+      if (lastError) {
+        logger.error("PostgreSQL migration warning after retries", { meta: { error: lastError instanceof Error ? lastError.message : lastError } });
+      }
+    })().catch(err => logger.error("DB init failed", { meta: { error: err } }));
+  } else {
+    logger.info("No DATABASE_URL configured. Using JSON file storage.");
+  }
+
+  // Start whatsmeow bridge
+  if (!process.env.WHATSMEOW_API_URL && !process.env.WHATSMEOW_EXTERNAL_URL) {
+    const { startBridge, stopBridge } = await import("./server/whatsmeow-bridge-manager");
+    startBridge()
+      .then(async (bridgeUrl: string) => {
+        setWhatsmeowApiUrl(bridgeUrl);
+        logger.info(`Whatsmeow bridge integrated at ${bridgeUrl}`);
+        try {
+          const { loadData } = await import("./server/data");
+          const { callWhatsmeowBridge } = await import("./server/whatsapp-utils");
+          const data = await loadData();
+          const connectedSessions = (data.whatsappConnections || []).filter((c: any) => c.status === "connected" || c.status === "connecting");
+          for (const conn of connectedSessions) {
+            try {
+              const resp = await callWhatsmeowBridge<Record<string, unknown>>(`/connections/${conn.id}/connect`, {
+                method: "POST",
+                body: JSON.stringify({ id: conn.id, name: conn.name, phoneNumber: conn.normalizedPhone, formattedPhone: conn.phoneNumber })
+              });
+              if (resp) conn.status = "connected";
+              if (resp?.deviceJid) conn.deviceJid = String(resp.deviceJid);
+              logger.info(`[WhatsApp] Auto-reconnected session ${conn.name}`);
+            } catch (e) {
+              logger.warn(`[WhatsApp] Failed to reconnect ${conn.name}`, { meta: { error: e instanceof Error ? e.message : e } });
+              conn.status = "disconnected";
+            }
+            conn.updatedAt = new Date().toISOString();
+          }
+          if (connectedSessions.length > 0) {
+            const { saveData } = await import("./server/data");
+            await saveData(data);
+          }
+        } catch (e) {
+          logger.warn("[WhatsApp] Auto-reconnect check failed", { meta: { error: e instanceof Error ? e.message : e } });
+        }
+      })
+      .catch((error: Error) => {
+        logger.error("Failed to start embedded whatsmeow bridge", { meta: { error: error.message } });
+        logger.info("WhatsApp features will be unavailable. Set WHATSMEOW_API_URL to use an external bridge.");
+      });
+  }
 }
 
 if (!process.env.VITEST) {
