@@ -175,6 +175,21 @@ export async function ensureCoreAuthSchema(): Promise<void> {
   await getPool().query(CORE_SCHEMA_SQL);
 }
 
+function readMigrationFile(filename: string): string {
+  try {
+    const filePath = path.join(process.cwd(), "server", "migrations", filename);
+    return fs.readFileSync(filePath, "utf-8");
+  } catch {
+    const fallbackPath = path.join(__dirname, "migrations", filename);
+    try {
+      return fs.readFileSync(fallbackPath, "utf-8");
+    } catch {
+      console.warn(`Migration file ${filename} not found, skipping.`);
+      return "";
+    }
+  }
+}
+
 export async function runMigrations(): Promise<void> {
   if (!isDatabaseAvailable()) return;
 
@@ -425,23 +440,18 @@ export async function runMigrations(): Promise<void> {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `},
-      { name: "003_complete_360", sql: fs.readFileSync(
-        path.join(process.cwd(), "server", "migrations", "003_complete_360.sql"),
-        "utf-8"
-      )},
-      { name: "004_rls_policies", sql: fs.readFileSync(
-        path.join(process.cwd(), "server", "migrations", "0004_rls_policies.sql"),
-        "utf-8"
-      )},
-      { name: "005_tiss_expansion", sql: fs.readFileSync(
-        path.join(process.cwd(), "server", "migrations", "005_tiss_expansion.sql"),
-        "utf-8"
-      )}
+      { name: "003_complete_360", sql: readMigrationFile("003_complete_360.sql") },
+      { name: "004_rls_policies", sql: readMigrationFile("0004_rls_policies.sql") },
+      { name: "005_tiss_expansion", sql: readMigrationFile("005_tiss_expansion.sql") }
     ];
 
     for (const migration of migrationFiles) {
       const exists = await client.query("SELECT id FROM _migrations WHERE name = $1", [migration.name]);
       if (exists.rows.length === 0) {
+        if (!migration.sql.trim()) {
+          console.warn(`Migration ${migration.name} has no SQL content, skipping.`);
+          continue;
+        }
         await client.query("BEGIN");
         try {
           await client.query(migration.sql);

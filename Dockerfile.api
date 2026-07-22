@@ -17,6 +17,7 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist/server.cjs ./dist/server.cjs
+COPY --from=build /app/server/migrations ./server/migrations
 RUN mkdir -p /app/data /app/uploads
 EXPOSE 5173
 CMD ["node", "dist/server.cjs"]
